@@ -8,12 +8,16 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "compile": "cd ../server && make -B && cd ../app && cp ../server/vit.rserve.ts src/rserve/vit.rserve.ts",
+    "rserve": "cd ../server && Rscript vit.rserve.R"
   },
   "dependencies": {
-    "@tmelliott/react-rserve": "0.9.5",
+    "@tailwindcss/vite": "^4.2.4",
+    "@tmelliott/react-rserve": "0.10.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "rserve-ts": "0.9.1",
+    "tailwindcss": "^4.2.4",
     "zod": "^3.25.67"
   },
   "devDependencies": {

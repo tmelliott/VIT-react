@@ -1,8 +1,6 @@
 # Created by https://www.toptal.com/developers/gitignore/api/node,react,linux,macos,windows,r
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,react,linux,macos,windows,r
 
-server/out
-
 ### Linux ###
 *~
 

@@ -1,10 +1,8 @@
-OUTDIR = out
 
 vit.rserve.*: vit.R
-	mkdir -p $(OUTDIR)
-	Rscript -e "RserveTS::ts_compile('vit.R', filename = '$(OUTDIR)/vit.rserve')"
+	Rscript -e "RserveTS::ts_compile('vit.R', format = TRUE)"
 
 clean:
-	rm -rf $(OUTDIR)
+	rm -f vit.rserve.*
 
 .PHONY: clean

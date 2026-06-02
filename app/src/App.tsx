@@ -1,9 +1,8 @@
 import { VitWidget } from './VitWidget'
-import './App.css'
 
 function App() {
   return (
-    <main className="app-root">
+    <main className="p-4">
       <VitWidget />
     </main>
   )
