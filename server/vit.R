@@ -35,7 +35,22 @@ vitWidget <- createWidget(
         .self$data <- d
         .self$dsInfo$nrows <- nrow(d)
         .self$dsInfo$ncols <- ncol(d)
+
+        num_cols <- names(d)[vapply(d, is.numeric, logical(1))]
+        child <- .self$samplingVariation
+        child$vit <- .self
+        child$set("variables", num_cols)
+        if (length(num_cols) > 0L) {
+          child$set("xvar", num_cols[[1L]])
+        } else {
+          child$set("xvar", "")
+        }
+        child$set("status", "idle")
+        child$set("progress", 0L)
+        reset_result_state(child)
+
         .self$updateState()
+        child$updateState(all = TRUE)
 
         NULL
       },

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useRserve, useWidget } from '@tmelliott/react-rserve'
-import vitAppSchema, { type TVitApp } from './rserve/vit.rserve'
+import vitAppSchema from './rserve/vit.rserve'
+import type { VitAppShape, VitWidgetHook } from './rserve/vit.types'
 import { SamplingVariation } from './components/SamplingVariation'
 
 const DEFAULT_DATA_URL =
@@ -15,8 +16,8 @@ export function VitWidget() {
   })
 
   return (
-    <section className="vit-widget">
-      <h1>VIT skeleton</h1>
+    <section className="vit-widget flex min-h-0 flex-1 flex-col gap-2">
+      <h1 className="shrink-0 text-lg font-bold">VIT</h1>
 
       {loading && <p>Connecting to Rserve…</p>}
       {error && (
@@ -25,68 +26,85 @@ export function VitWidget() {
         </p>
       )}
 
-      {app && <VITApp app={app} />}
+      {app && <VITApp app={app as VitAppShape} />}
     </section>
   )
 }
 
-function VITApp({app}: {app: TVitApp}) {
-  const { state, methods, children } = useWidget(app.vitWidget)
+function VITApp({ app }: { app: VitAppShape }) {
+  const { state, methods, children } = useWidget(
+    app.vitWidget,
+  ) as VitWidgetHook
   const [urlInput, setUrlInput] = useState(DEFAULT_DATA_URL)
 
-  const [module, setModule] = useState<"samplingVariation" | null>(null);
+  const [module, setModule] = useState<'samplingVariation' | null>(null)
 
-  if (!state) return <>Loading ...</>;
+  if (!state) return <>Loading ...</>
 
   return (
-    <div className="flex flex-col gap-4">
-       <>
-         <div className="p-4 bg-gray-100 rounded-md flex items-center gap-2">
-          <label htmlFor="dataset-url" className="block text-sm font-medium text-gray-700">Dataset URL</label>
-          <input
-            type="url"
-            className="border border-gray-300 px-2 py-1 rounded bg-white"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            spellCheck={false}
-            size={72}
-            />
+    <div
+      className={`flex flex-col gap-3 ${module ? 'min-h-0 flex-1' : ''}`}
+    >
+      <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-md bg-gray-100 p-3">
+        <label
+          htmlFor="dataset-url"
+          className="text-sm font-medium text-gray-700"
+        >
+          Dataset
+        </label>
+        <input
+          id="dataset-url"
+          type="url"
+          className="min-w-0 flex-1 rounded border border-gray-300 bg-white px-2 py-1"
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          spellCheck={false}
+        />
+        <button
+          type="button"
+          className="cursor-pointer rounded bg-gray-200 px-2 py-1 shadow hover:bg-gray-300"
+          onClick={() => void methods?.load_dataset?.(urlInput)}
+        >
+          Load
+        </button>
+        {state.dsInfo.nrows > 0 && (
+          <span className="text-sm text-gray-600">
+            {state.dsInfo.nrows} rows × {state.dsInfo.ncols} cols
+          </span>
+        )}
+        {module === 'samplingVariation' && (
           <button
             type="button"
-            className="px-2 py-1 bg-gray-200 rounded shadow cursor-pointer hover:bg-gray-300"
-            onClick={() =>
-              methods?.load_dataset?.(urlInput)
-            }
+            className="ml-auto text-sm text-blue-600 hover:underline"
+            onClick={() => setModule(null)}
           >
-            Load
+            ← Modules
           </button>
-        </div>
-
-        <div className="p-4 bg-gray-100 rounded-md">
-          {state.dsInfo.nrows > 0 ? ( <>
-          <h2 className="text-lg font-bold">Dataset Information</h2>
-          <p>Number of rows: {state.dsInfo.nrows}</p>
-          <p>Number of columns: {state.dsInfo.ncols}</p>
-          </>) : (
-            <p>No dataset loaded</p>
-          )}
-        </div>
-
-        {module === null && (
-          <div className="flex flex-col gap-2 mx-4">
-            <h2 className="text-lg font-bold">Modules</h2>
-            <ul>
-              <li className="cursor-pointer hover:text-blue-500 bg-gray-100 rounded-md p-2" onClick={() => setModule("samplingVariation")}>
-                Sampling Variation
-              </li>
-            </ul>
-          </div>
         )}
+      </div>
 
-        {module === "samplingVariation" && children && (
-          <SamplingVariation module={children.samplingVariation} />
-        )}
-      </>
+      {module === null && (
+        <div className="flex flex-col gap-2">
+          <h2 className="text-lg font-bold">Modules</h2>
+          <ul>
+            <li
+              className="cursor-pointer rounded-md bg-gray-100 p-2 hover:text-blue-500"
+              onClick={() => setModule('samplingVariation')}
+            >
+              Sampling Variation
+            </li>
+          </ul>
+        </div>
+      )}
+
+      {module === 'samplingVariation' && children && (
+        <div className="flex min-h-0 flex-1">
+          <SamplingVariation
+            module={children.samplingVariation}
+            maxRows={state.dsInfo.nrows}
+          />
+        </div>
+      )}
     </div>
   )
 }

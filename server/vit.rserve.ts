@@ -15,9 +15,25 @@ export const samplingVariation = Robj.ocap(
             yvar: z.union([z.string(), z.undefined()]),
             sample_size: z.union([z.number(), z.undefined()]),
             statistic: z.union([z.string(), z.undefined()]),
+            status: z.union([z.string(), z.undefined()]),
+            progress: z.union([z.number(), z.undefined()]),
+            error_message: z.union([z.string(), z.undefined()]),
+            population: z.union([z.instanceof(Float64Array), z.undefined()]),
+            population_stat: z.union([z.number(), z.undefined()]),
+            sample_stats: z.union([z.instanceof(Float64Array), z.undefined()]),
+            sample_indices: z.union([z.instanceof(Int32Array), z.undefined()]),
+            dist_y: z.union([z.instanceof(Float64Array), z.undefined()]),
+            scales: z.union([
+              z.object({
+                pop: z.instanceof(Float64Array),
+                sample: z.instanceof(Float64Array),
+                dist: z.instanceof(Float64Array),
+              }),
+              z.undefined(),
+            ]),
           }),
         ],
-        z.null()
+        z.null(),
       ),
       z.undefined(),
     ]),
@@ -27,7 +43,7 @@ export const samplingVariation = Robj.ocap(
       variables: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.array(z.string())], z.null()), z.string()],
-          Robj.character(1)
+          Robj.character(1),
         ),
         get: Robj.ocap([], Robj.character(0)),
         set: Robj.ocap([z.array(z.string())], Robj.null()),
@@ -35,7 +51,7 @@ export const samplingVariation = Robj.ocap(
       xvar: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.string()], z.null()), z.string()],
-          Robj.character(1)
+          Robj.character(1),
         ),
         get: Robj.ocap([], Robj.character(1)),
         set: Robj.ocap([z.string()], Robj.null()),
@@ -43,7 +59,7 @@ export const samplingVariation = Robj.ocap(
       yvar: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.string()], z.null()), z.string()],
-          Robj.character(1)
+          Robj.character(1),
         ),
         get: Robj.ocap([], Robj.character(1)),
         set: Robj.ocap([z.string()], Robj.null()),
@@ -51,7 +67,7 @@ export const samplingVariation = Robj.ocap(
       sample_size: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.number()], z.null()), z.string()],
-          Robj.character(1)
+          Robj.character(1),
         ),
         get: Robj.ocap([], Robj.integer(1)),
         set: Robj.ocap([z.number()], Robj.null()),
@@ -59,10 +75,119 @@ export const samplingVariation = Robj.ocap(
       statistic: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.string()], z.null()), z.string()],
-          Robj.character(1)
+          Robj.character(1),
         ),
         get: Robj.ocap([], Robj.character(1)),
         set: Robj.ocap([z.string()], Robj.null()),
+      }),
+      status: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.string()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(1)),
+        set: Robj.ocap([z.string()], Robj.null()),
+      }),
+      progress: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.number()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.integer(1)),
+        set: Robj.ocap([z.number()], Robj.null()),
+      }),
+      error_message: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.string()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(1)),
+        set: Robj.ocap([z.string()], Robj.null()),
+      }),
+      population: Robj.list({
+        register: Robj.ocap(
+          [
+            Robj.js_function([z.instanceof(Float64Array)], z.null()),
+            z.string(),
+          ],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.numeric(0)),
+        set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      population_stat: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.number()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.numeric(1)),
+        set: Robj.ocap([z.number()], Robj.null()),
+      }),
+      sample_stats: Robj.list({
+        register: Robj.ocap(
+          [
+            Robj.js_function([z.instanceof(Float64Array)], z.null()),
+            z.string(),
+          ],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.numeric(0)),
+        set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      sample_indices: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.instanceof(Int32Array)], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.integer(0)),
+        set: Robj.ocap([z.instanceof(Int32Array)], Robj.null()),
+      }),
+      dist_y: Robj.list({
+        register: Robj.ocap(
+          [
+            Robj.js_function([z.instanceof(Float64Array)], z.null()),
+            z.string(),
+          ],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.numeric(0)),
+        set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      scales: Robj.list({
+        register: Robj.ocap(
+          [
+            Robj.js_function(
+              [
+                z.object({
+                  pop: z.instanceof(Float64Array),
+                  sample: z.instanceof(Float64Array),
+                  dist: z.instanceof(Float64Array),
+                }),
+              ],
+              z.null(),
+            ),
+            z.string(),
+          ],
+          Robj.character(1),
+        ),
+        get: Robj.ocap(
+          [],
+          Robj.list({
+            pop: Robj.numeric(0),
+            sample: Robj.numeric(0),
+            dist: Robj.numeric(0),
+          }),
+        ),
+        set: Robj.ocap(
+          [
+            z.object({
+              pop: z.instanceof(Float64Array),
+              sample: z.instanceof(Float64Array),
+              dist: z.instanceof(Float64Array),
+            }),
+          ],
+          Robj.null(),
+        ),
       }),
     }),
     children: Robj.list(),
@@ -73,8 +198,8 @@ export const samplingVariation = Robj.ocap(
         strict: Robj.character(1),
       }),
     }),
-    methods: Robj.list(),
-  })
+    methods: Robj.list({ record_choices: Robj.ocap([], Robj.null()) }),
+  }),
 );
 export const vitWidget = Robj.ocap(
   [
@@ -88,7 +213,7 @@ export const vitWidget = Robj.ocap(
             ]),
           }),
         ],
-        z.null()
+        z.null(),
       ),
       z.undefined(),
     ]),
@@ -100,19 +225,19 @@ export const vitWidget = Robj.ocap(
           [
             Robj.js_function(
               [z.object({ nrows: z.number(), ncols: z.number() })],
-              z.null()
+              z.null(),
             ),
             z.string(),
           ],
-          Robj.character(1)
+          Robj.character(1),
         ),
         get: Robj.ocap(
           [],
-          Robj.list({ nrows: Robj.integer(1), ncols: Robj.integer(1) })
+          Robj.list({ nrows: Robj.integer(1), ncols: Robj.integer(1) }),
         ),
         set: Robj.ocap(
           [z.object({ nrows: z.number(), ncols: z.number() })],
-          Robj.null()
+          Robj.null(),
         ),
       }),
     }),
@@ -125,7 +250,7 @@ export const vitWidget = Robj.ocap(
       }),
     }),
     methods: Robj.list({ load_dataset: Robj.ocap([z.string()], Robj.null()) }),
-  })
+  }),
 );
 
 export type TSamplingVariation = z.infer<typeof samplingVariation>;

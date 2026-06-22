@@ -1,0 +1,76 @@
+import * as d3 from 'd3'
+import { useMemo } from 'react'
+import { DOT_RADIUS } from '../d3/heapLayout'
+import { scaleDomain } from '../types'
+
+const MARGIN = { left: 24, right: 24, top: 4, bottom: 4 }
+const LABEL_HEIGHT = 20
+export const AXIS_HEIGHT = 28
+export const BOX_AREA_FRACTION = 0.25
+
+export function paneRegions(innerHeight: number, radius = DOT_RADIUS) {
+  const boxAreaHeight = Math.max(28, Math.floor(innerHeight * BOX_AREA_FRACTION))
+  const dotAreaHeight = innerHeight - boxAreaHeight
+  const baselineY = dotAreaHeight - radius
+  const boxTop = dotAreaHeight
+  const boxCenterY = boxTop + boxAreaHeight / 2
+  const distBaselineY = innerHeight - radius
+  return {
+    dotAreaHeight,
+    boxAreaHeight,
+    baselineY,
+    boxTop,
+    boxCenterY,
+    distBaselineY,
+    distDotAreaHeight: innerHeight,
+  }
+}
+
+export function usePaneLayout(width: number, height: number) {
+  return useMemo(() => {
+    const paneHeight = Math.floor(height / 3)
+    const innerWidth = width - MARGIN.left - MARGIN.right
+    const plotTop = LABEL_HEIGHT + MARGIN.top
+    const plotBand = paneHeight - plotTop - MARGIN.bottom
+    const innerHeight = plotBand - AXIS_HEIGHT
+    const regions = paneRegions(innerHeight)
+    return {
+      paneHeight,
+      innerWidth,
+      innerHeight,
+      axisHeight: AXIS_HEIGHT,
+      plotTop,
+      margin: MARGIN,
+      ...regions,
+    }
+  }, [width, height])
+}
+
+export function useSamplingScales(
+  popDomain: [number, number],
+  distDomain: [number, number],
+  innerWidth: number,
+  innerHeight: number,
+) {
+  return useMemo(
+    () => ({
+      popX: d3.scaleLinear().domain(popDomain).range([0, innerWidth]),
+      sampleX: d3.scaleLinear().domain(popDomain).range([0, innerWidth]),
+      distX: d3.scaleLinear().domain(distDomain).range([0, innerWidth]),
+      innerHeight,
+    }),
+    [popDomain, distDomain, innerWidth, innerHeight],
+  )
+}
+
+export function domainsFromState(scales: {
+  pop?: Float64Array | number[]
+  sample?: Float64Array | number[]
+  dist?: Float64Array | number[]
+} | undefined) {
+  return {
+    pop: scaleDomain(scales?.pop),
+    sample: scaleDomain(scales?.sample ?? scales?.pop),
+    dist: scaleDomain(scales?.dist),
+  }
+}
