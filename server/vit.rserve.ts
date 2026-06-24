@@ -12,6 +12,7 @@ export const samplingVariation = Robj.ocap(
           z.object({
             variables: z.union([z.array(z.string()), z.undefined()]),
             group_variables: z.union([z.array(z.string()), z.undefined()]),
+            all_variables: z.union([z.array(z.string()), z.undefined()]),
             xvar: z.union([z.string(), z.undefined()]),
             yvar: z.union([z.string(), z.undefined()]),
             sample_size: z.union([z.number(), z.undefined()]),
@@ -58,6 +59,14 @@ export const samplingVariation = Robj.ocap(
         set: Robj.ocap([z.array(z.string())], Robj.null()),
       }),
       group_variables: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.array(z.string())], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(0)),
+        set: Robj.ocap([z.array(z.string())], Robj.null()),
+      }),
+      all_variables: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.array(z.string())], z.null()), z.string()],
           Robj.character(1),

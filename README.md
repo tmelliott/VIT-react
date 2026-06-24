@@ -17,7 +17,19 @@ bun install
 bun run dev
 ```
 
-Open http://localhost:5173, load a dataset (iris CSV by default), open **Sampling Variation**, choose variable / sample size / statistic, click **Confirm**, then use animation controls.
+Open http://localhost:5173, open **Sampling Variation**, load a dataset (or click **Use example**), choose variable / sample size / statistic, click **Confirm**, then use animation controls.
+
+Shareable module URLs use query params, e.g. `/sampvar?url=https%3A%2F%2F...&xvar=size&sampleSize=30`. A dataset is loaded automatically only when `url` is present; otherwise use **Load dataset** or **Use example**.
+
+## Security (future work)
+
+Dataset import accepts an http(s) URL from the user and passes it to R `load_dataset()`, which fetches and reads the file. Before any public or multi-tenant deployment, add defence in depth:
+
+- **R server:** validate URL scheme (http/https only), block private/metadata IP ranges and `file://`, optionally allowlist hosts.
+- **Proxy:** fetch datasets in a sandboxed fetcher rather than letting R open arbitrary URLs (SSRF risk).
+- **Frontend:** current zod validation is UX-only; do not rely on it for security.
+
+Track implementation when deployment model is decided.
 
 ## Local packages
 

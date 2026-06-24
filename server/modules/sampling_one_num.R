@@ -5,6 +5,10 @@ ANIM_POOL_SIZE <- 100L
 
 sample_statistic <- function(x, statistic = c("mean", "median")) {
     statistic <- match.arg(statistic)
+    x <- x[is.finite(x)]
+    if (length(x) == 0L) {
+        return(NA_real_)
+    }
     if (statistic == "mean") {
         mean(x)
     } else {
@@ -107,7 +111,12 @@ extract_population <- function(widget) {
     if (is.null(d) || !nzchar(xvar) || !xvar %in% names(d)) {
         return(NULL)
     }
-    as.numeric(d[[xvar]])
+    x <- as.numeric(d[[xvar]])
+    x <- x[is.finite(x)]
+    if (length(x) == 0L) {
+        return(NULL)
+    }
+    x
 }
 
 reset_result_state <- function(widget) {

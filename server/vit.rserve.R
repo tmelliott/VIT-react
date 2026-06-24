@@ -47,22 +47,15 @@ vitWidget <- createWidget(
         child$vit <- .self
         child$set("variables", num_cols)
         child$set("group_variables", cat_cols)
-        if (length(num_cols) > 0L) {
-          child$set("xvar", num_cols[[1L]])
-        } else {
-          child$set("xvar", "")
-        }
-        if (length(cat_cols) > 0L) {
-          child$set("yvar", cat_cols[[1L]])
-        } else {
-          child$set("yvar", "")
-        }
+        child$set("all_variables", names(d))
+        child$set("xvar", "")
+        child$set("yvar", "")
         child$set("status", "idle")
         child$set("progress", 0L)
         reset_result_state(child)
 
         .self$updateState()
-        child$updateState(all = TRUE)
+        child$updateState()
 
         NULL
       },

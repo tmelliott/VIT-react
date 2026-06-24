@@ -1,9 +1,12 @@
-import { useRef, type ComponentRef } from 'react'
+import { useRef, useState, type ComponentRef } from 'react'
 import { useWidget } from '@tmelliott/react-rserve'
 import type {
   SamplingVariationCtor,
   SamplingVariationHook,
 } from '../../rserve/vit.types'
+import { DatasetImport } from '../DatasetImport'
+import { useDatasetFromUrl } from '../../hooks/useDatasetFromUrl'
+import { useModuleSearchParams } from '../../hooks/useModuleSearchParams'
 import { AnimationControls } from './AnimationControls'
 import { ConfigPanel } from './ConfigPanel'
 import { useAnimationController } from './hooks/useAnimationController'
@@ -16,35 +19,61 @@ import {
   toNumberArray,
   toStringArray,
 } from './types'
+import {
+  getVariableSupport,
+} from './variableSupport'
+
+function useInferenceActive(moduleStatus: string, configEpoch: number) {
+  const confirmedEpochRef = useRef<number | null>(null)
+
+  if (moduleStatus !== 'ready') {
+    confirmedEpochRef.current = null
+  } else if (confirmedEpochRef.current === null) {
+    confirmedEpochRef.current = configEpoch
+  }
+
+  return moduleStatus === 'ready' && confirmedEpochRef.current === configEpoch
+}
 
 export function SamplingVariation({
   module,
-  maxRows = 0,
 }: {
   module: SamplingVariationCtor
-  maxRows?: number
 }) {
-  const { state, set, methods, status: widgetStatus } = useWidget(
-    module,
-  ) as SamplingVariationHook
-  const paneRef = useRef<ComponentRef<typeof ThreePaneDisplay>>(null)
-  const anim = useAnimationController(state, paneRef)
+  const widget = useWidget(module) as SamplingVariationHook
 
-  if (widgetStatus === 'loading') {
+  if (widget.status === 'loading') {
     return <p className="text-gray-600">Connecting module…</p>
   }
 
-  if (!state) {
+  if (!widget.state) {
     return <p className="text-gray-600">Waiting for module state…</p>
   }
 
+  return <SamplingVariationView widget={widget} />
+}
+
+function SamplingVariationView({
+  widget,
+}: {
+  widget: SamplingVariationHook & { state: NonNullable<SamplingVariationHook['state']> }
+}) {
+  const { state, set, methods } = widget
+  const dataset = useDatasetFromUrl()
+  const paneRef = useRef<ComponentRef<typeof ThreePaneDisplay>>(null)
+  const [configEpoch, setConfigEpoch] = useState(0)
+  const bumpConfig = () => setConfigEpoch((n) => n + 1)
+
   const variables = state.variables ?? []
   const groupVariables = state.group_variables ?? []
+  const allVariables = state.all_variables ?? []
   const xvar = state.xvar ?? ''
   const yvar = state.yvar ?? ''
   const sampleSize = state.sample_size ?? 20
   const statistic = state.statistic ?? 'mean'
   const moduleStatus = state.status ?? 'idle'
+  const inferenceActive = useInferenceActive(moduleStatus, configEpoch)
+  const anim = useAnimationController(state, paneRef, inferenceActive)
   const progress = state.progress ?? 0
   const errorMessage = state.error_message ?? ''
   const population = toNumberArray(state.population)
@@ -53,18 +82,58 @@ export function SamplingVariation({
   const groupStats = toNumberArray(state.group_stats)
   const nGroups = state.n_groups ?? 0
   const statKind = (state.stat_kind ?? '') as '' | 'difference' | 'average_deviation'
-  const numCatMode = isNumCatMode(nGroups, yvar)
-  const maxSampleSize = maxRows > 0 ? maxRows : Math.max(population.length, 1)
+  const variableSupport = getVariableSupport(
+    xvar,
+    yvar,
+    variables,
+    groupVariables,
+  )
+  const numCatMode = variableSupport === 'num_cat' && isNumCatMode(nGroups, yvar)
+  const maxSampleSize =
+    dataset.dsInfo.nrows > 0
+      ? dataset.dsInfo.nrows
+      : Math.max(population.length, 1)
+  const minSampleSize = numCatMode ? 2 : 1
+  const canConfirm =
+    (variableSupport === 'one_num' || variableSupport === 'num_cat') &&
+    xvar !== '' &&
+    sampleSize >= minSampleSize &&
+    sampleSize <= maxSampleSize &&
+    moduleStatus !== 'computing'
+
+  const handleXvarChange = (value: string) => {
+    searchHandlers.onXvarChange(value)
+    if (value !== '' && value === yvar) {
+      searchHandlers.onYvarChange('')
+    }
+  }
+
+  const searchHandlers = useModuleSearchParams({
+    variables,
+    groupVariables,
+    hasData: dataset.hasData,
+    set,
+    onConfigChange: bumpConfig,
+  })
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-3">
-      <h1 className="shrink-0 text-xl font-bold">Sampling Variation</h1>
+    <div className="flex min-h-0 flex-1 gap-4">
+      <aside className="flex w-full max-w-[360px] min-w-[240px] shrink-0 flex-col gap-4 overflow-y-auto">
+        <DatasetImport
+          urlInput={dataset.urlInput}
+          placeholder={dataset.placeholder}
+          onUrlInputChange={dataset.setUrlInput}
+          onLoad={() => void dataset.loadDataset(dataset.urlInput)}
+          onUseExample={() => void dataset.loadExample()}
+          exampleLabel={dataset.exampleLabel}
+          loading={dataset.loading}
+          nrows={dataset.dsInfo.nrows}
+          ncols={dataset.dsInfo.ncols}
+        />
 
-      <div className="flex min-h-0 flex-1 gap-4">
-        <aside className="flex w-full max-w-[360px] min-w-[240px] shrink-0 flex-1 flex-col gap-4 overflow-y-auto">
+        {dataset.hasData && (
           <ConfigPanel
-            variables={variables}
-            groupVariables={groupVariables}
+            allVariables={allVariables.length > 0 ? allVariables : [...variables, ...groupVariables]}
             xvar={xvar}
             yvar={yvar}
             sampleSize={sampleSize}
@@ -74,51 +143,56 @@ export function SamplingVariation({
             status={moduleStatus}
             errorMessage={errorMessage}
             maxSampleSize={maxSampleSize}
-            onXvarChange={(v) => void set('xvar', v)}
-            onYvarChange={(v) => void set('yvar', v)}
-            onSampleSizeChange={(n) => void set('sample_size', n)}
-            onStatisticChange={(s) => void set('statistic', s)}
-            onConfirm={() => void methods?.record_choices?.()}
+            canConfirm={canConfirm}
+            onXvarChange={handleXvarChange}
+            onYvarChange={searchHandlers.onYvarChange}
+            onSampleSizeChange={searchHandlers.onSampleSizeChange}
+            onStatisticChange={searchHandlers.onStatisticChange}
+            onConfirm={() => {
+              void methods?.record_choices?.()?.catch((err: unknown) => {
+                console.error('record_choices failed:', err)
+              })
+            }}
           />
+        )}
 
-          <ProgressBar progress={progress} visible={moduleStatus === 'computing'} />
+        <ProgressBar progress={progress} visible={moduleStatus === 'computing'} />
 
-          {moduleStatus === 'ready' && (
-            <AnimationControls
-              phase={anim.phase}
-              samplingM={anim.samplingM}
-              distM={anim.distM}
-              onSamplingMChange={anim.setSamplingM}
-              onDistMChange={anim.setDistM}
-              onGo={anim.onGo}
-              onPause={anim.onPause}
-              onResume={anim.onResume}
-              onStop={anim.onStop}
-              onReset={anim.onReset}
-              cursor={anim.cursor}
-            />
-          )}
-        </aside>
-
-        <main className="flex min-h-0 min-w-0 flex-2">
-          <ThreePaneDisplay
-            ref={paneRef}
-            population={population}
-            populationGroup={populationGroup}
-            groupLevels={groupLevels}
-            groupStats={groupStats}
-            nGroups={nGroups}
-            statKind={statKind}
-            statistic={statistic}
-            populationStat={state.population_stat}
-            showPopulationStat={
-              moduleStatus === 'ready' ||
-              (numCatMode && population.length > 0 && moduleStatus === 'idle')
-            }
-            scales={state.scales}
+        {inferenceActive && (
+          <AnimationControls
+            phase={anim.phase}
+            samplingM={anim.samplingM}
+            distM={anim.distM}
+            onSamplingMChange={anim.setSamplingM}
+            onDistMChange={anim.setDistM}
+            onGo={anim.onGo}
+            onPause={anim.onPause}
+            onResume={anim.onResume}
+            onStop={anim.onStop}
+            onReset={anim.onReset}
+            cursor={anim.cursor}
           />
-        </main>
-      </div>
+        )}
+      </aside>
+
+      <main className="flex min-h-0 min-w-0 flex-2">
+        <ThreePaneDisplay
+          ref={paneRef}
+          population={population}
+          populationGroup={populationGroup}
+          groupLevels={groupLevels}
+          groupStats={groupStats}
+          nGroups={nGroups}
+          statKind={statKind}
+          statistic={statistic}
+          populationStat={state.population_stat}
+          showPopulationStat={inferenceActive}
+          showFullPopulation={inferenceActive}
+          moduleReady={inferenceActive}
+          variableSupport={variableSupport}
+          scales={state.scales}
+        />
+      </main>
     </div>
   )
 }

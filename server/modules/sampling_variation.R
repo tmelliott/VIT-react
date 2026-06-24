@@ -22,6 +22,7 @@ samplingVariation <- createWidget(
         vit = "ANY",
         variables = ts_character(0L, default = character(0)),
         group_variables = ts_character(0L, default = character(0)),
+        all_variables = ts_character(0L, default = character(0)),
         xvar = ts_character(1L, default = ""),
         yvar = ts_character(1L, default = ""),
         sample_size = ts_integer(1L, default = 20L),
@@ -66,6 +67,27 @@ samplingVariation <- createWidget(
                 .self$status <- "idle"
             }
 
+            if (!nzchar(.self$xvar)) {
+                reset_result_state(.self)
+                .self$status <- "idle"
+                .self$updateState()
+                return()
+            }
+
+            if (!(.self$xvar %in% .self$variables)) {
+                reset_result_state(.self)
+                .self$status <- "idle"
+                .self$updateState()
+                return()
+            }
+
+            if (nzchar(.self$yvar) && !(.self$yvar %in% .self$group_variables)) {
+                reset_result_state(.self)
+                .self$status <- "idle"
+                .self$updateState()
+                return()
+            }
+
             if (nzchar(.self$yvar)) {
                 preview <- preview_num_cat(.self)
                 if (is.null(preview)) {
@@ -74,12 +96,15 @@ samplingVariation <- createWidget(
                     .self$updateState()
                     return()
                 }
+                pop_domain <- scale_domain(preview$population)
                 .self$batch(c(
                     "population",
                     "population_group",
                     "group_levels",
                     "n_groups",
                     "stat_kind",
+                    "population_stat",
+                    "scales",
                     "status",
                     "error_message"
                 ), {
@@ -92,9 +117,16 @@ samplingVariation <- createWidget(
                     } else {
                         "average_deviation"
                     }
+                    .self$population_stat <- 0
+                    .self$scales <- list(
+                        pop = pop_domain,
+                        sample = pop_domain,
+                        dist = numeric(0)
+                    )
                     .self$status <- "idle"
                     .self$error_message <- ""
                 })
+                .self$updateState()
                 return()
             }
 
@@ -105,12 +137,26 @@ samplingVariation <- createWidget(
                 .self$updateState()
                 return()
             }
-            .self$batch(c("population", "status", "error_message"), {
+            pop_domain <- scale_domain(pop)
+            .self$batch(c(
+                "population",
+                "population_stat",
+                "scales",
+                "status",
+                "error_message"
+            ), {
                 .self$population <- pop
+                .self$population_stat <- 0
+                .self$scales <- list(
+                    pop = pop_domain,
+                    sample = pop_domain,
+                    dist = numeric(0)
+                )
                 reset_num_cat_state(.self)
                 .self$status <- "idle"
                 .self$error_message <- ""
             })
+            .self$updateState()
         }),
         record_choices = ts_function(
             function() {
@@ -155,10 +201,8 @@ samplingVariation <- createWidget(
                             sample_size = n_samp,
                             statistic = stat,
                             progress_callback = function(p) {
-                                .self$batch(c("progress", "status"), {
-                                    .self$progress <- as.integer(p)
-                                    .self$status <- "computing"
-                                })
+                                .self$progress <- as.integer(p)
+                                .self$updateState()
                             }
                         ),
                         error = function(e) {
@@ -200,10 +244,8 @@ samplingVariation <- createWidget(
                             sample_size = n_samp,
                             statistic = stat,
                             progress_callback = function(p) {
-                                .self$batch(c("progress", "status"), {
-                                    .self$progress <- as.integer(p)
-                                    .self$status <- "computing"
-                                })
+                                .self$progress <- as.integer(p)
+                                .self$updateState()
                             }
                         ),
                         error = function(e) {
@@ -219,48 +261,27 @@ samplingVariation <- createWidget(
                     return(NULL)
                 }
 
-                batch_fields <- c(
-                    "population",
-                    "population_stat",
-                    "sample_stats",
-                    "sample_indices",
-                    "dist_y",
-                    "scales",
-                    "progress",
-                    "status",
-                    "error_message"
-                )
                 if (nzchar(.self$yvar)) {
-                    batch_fields <- c(
-                        batch_fields,
-                        "population_group",
-                        "group_levels",
-                        "group_stats",
-                        "stat_kind",
-                        "n_groups"
-                    )
+                    .self$population <- result$population
+                    .self$population_group <- result$population_group
+                    .self$group_levels <- result$group_levels
+                    .self$group_stats <- result$group_stats
+                    .self$stat_kind <- result$stat_kind
+                    .self$n_groups <- result$n_groups
                 } else {
                     reset_num_cat_state(.self)
+                    .self$population <- result$population
                 }
 
-                .self$batch(batch_fields, {
-                    .self$population <- result$population
-                    .self$population_stat <- result$population_stat
-                    .self$sample_stats <- result$sample_stats
-                    .self$sample_indices <- result$sample_indices
-                    .self$dist_y <- result$dist_y
-                    .self$scales <- result$scales
-                    .self$progress <- 100L
-                    .self$status <- "ready"
-                    .self$error_message <- ""
-                    if (nzchar(.self$yvar)) {
-                        .self$population_group <- result$population_group
-                        .self$group_levels <- result$group_levels
-                        .self$group_stats <- result$group_stats
-                        .self$stat_kind <- result$stat_kind
-                        .self$n_groups <- result$n_groups
-                    }
-                })
+                .self$population_stat <- result$population_stat
+                .self$sample_stats <- result$sample_stats
+                .self$sample_indices <- result$sample_indices
+                .self$dist_y <- result$dist_y
+                .self$scales <- result$scales
+                .self$progress <- 100L
+                .self$status <- "ready"
+                .self$error_message <- ""
+                .self$updateState()
 
                 NULL
             },

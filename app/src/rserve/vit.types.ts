@@ -37,6 +37,7 @@ export type VitWidgetHook = UseWidgetReturn<
 export type SamplingVariationProperties = {
   variables: PropertyGet<string[]>
   group_variables: PropertyGet<string[]>
+  all_variables: PropertyGet<string[]>
   xvar: PropertyGet<string>
   yvar: PropertyGet<string>
   sample_size: PropertyGet<number>

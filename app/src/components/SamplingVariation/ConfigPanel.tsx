@@ -1,6 +1,5 @@
 type ConfigPanelProps = {
-  variables: string[]
-  groupVariables: string[]
+  allVariables: string[]
   xvar: string
   yvar: string
   sampleSize: number
@@ -10,6 +9,7 @@ type ConfigPanelProps = {
   status: string
   errorMessage: string
   maxSampleSize: number
+  canConfirm: boolean
   onXvarChange: (v: string) => void
   onYvarChange: (v: string) => void
   onSampleSizeChange: (n: number) => void
@@ -18,8 +18,7 @@ type ConfigPanelProps = {
 }
 
 export function ConfigPanel({
-  variables,
-  groupVariables,
+  allVariables,
   xvar,
   yvar,
   sampleSize,
@@ -29,6 +28,7 @@ export function ConfigPanel({
   status,
   errorMessage,
   maxSampleSize,
+  canConfirm,
   onXvarChange,
   onYvarChange,
   onSampleSizeChange,
@@ -37,12 +37,7 @@ export function ConfigPanel({
 }: ConfigPanelProps) {
   const computing = status === 'computing'
   const minSampleSize = numCatMode ? 2 : 1
-  const canConfirm =
-    variables.length > 0 &&
-    xvar !== '' &&
-    sampleSize >= minSampleSize &&
-    sampleSize <= maxSampleSize &&
-    !computing
+  const secondaryOptions = allVariables.filter((name) => name !== xvar)
 
   return (
     <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-md border border-gray-200">
@@ -50,35 +45,34 @@ export function ConfigPanel({
 
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-sm">
-          Numeric variable
+          Primary variable
           <select
             className="border border-gray-300 rounded px-2 py-1 bg-white w-full"
             value={xvar}
-            disabled={computing || variables.length === 0}
+            disabled={computing || allVariables.length === 0}
             onChange={(e) => onXvarChange(e.target.value)}
           >
-            {variables.length === 0 ? (
-              <option value="">Load a dataset first</option>
-            ) : (
-              variables.map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))
-            )}
+            <option value="">
+              {allVariables.length === 0 ? 'Load a dataset first' : 'Select variable…'}
+            </option>
+            {allVariables.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
           </select>
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
-          Group variable
+          Secondary variable (optional)
           <select
             className="border border-gray-300 rounded px-2 py-1 bg-white w-full"
             value={yvar}
-            disabled={computing || groupVariables.length === 0}
+            disabled={computing || allVariables.length === 0 || !xvar}
             onChange={(e) => onYvarChange(e.target.value)}
           >
-            <option value="">None (one numeric)</option>
-            {groupVariables.map((v) => (
+            <option value="">None</option>
+            {secondaryOptions.map((v) => (
               <option key={v} value={v}>
                 {v}
               </option>

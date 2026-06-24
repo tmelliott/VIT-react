@@ -23,6 +23,11 @@ import {
 } from '../d3/sampleStatSummary'
 import type { PaneLayout } from '../d3/paneCoords'
 import { domainsFromState, usePaneLayout, useSamplingScales } from '../hooks/useSamplingScales'
+import {
+  effectiveDistDomain,
+  effectivePopDomain,
+  type VariableSupport,
+} from '../variableSupport'
 
 export type ThreePaneHandle = {
   popGroup: SVGGElement
@@ -60,6 +65,9 @@ type ThreePaneDisplayProps = {
   statistic: string
   populationStat: number | undefined
   showPopulationStat: boolean
+  showFullPopulation: boolean
+  moduleReady: boolean
+  variableSupport: VariableSupport
   scales: {
     pop?: Float64Array | number[]
     sample?: Float64Array | number[]
@@ -68,6 +76,22 @@ type ThreePaneDisplayProps = {
 }
 
 const PANE_LABELS = ['Data', 'Sample', 'Sampling Distribution'] as const
+
+function paneMessage(
+  paneIndex: number,
+  support: VariableSupport,
+  ready: boolean,
+): string | null {
+  if (support === 'unsupported') return 'Not supported'
+  if (support === 'empty') {
+    return paneIndex === 0 ? 'Select a primary variable' : null
+  }
+  if (!ready) {
+    if (paneIndex === 0) return null
+    return 'Confirm to generate samples'
+  }
+  return null
+}
 
 function drawGroupBandGuides(
   parent: SVGGElement,
@@ -114,6 +138,7 @@ function drawPopulationGrouped(
   popX: d3.ScaleLinear<number, number>,
   popY: number[],
   showStats: boolean,
+  showBoxplots: boolean,
   innerWidth: number,
   innerHeight: number,
 ) {
@@ -121,7 +146,7 @@ function drawPopulationGrouped(
   sel.selectAll('.pop-dot').remove()
   sel.selectAll('.pop-stat-line').remove()
   sel.selectAll('.pop-grand-mean').remove()
-  sel.selectAll('.pop-boxplot').remove()
+  sel.selectAll('[class^="pop-boxplot"]').remove()
   sel.selectAll('.pop-dev-arrow').remove()
   sel.selectAll('.pop-diff-arrow').remove()
 
@@ -177,14 +202,16 @@ function drawPopulationGrouped(
 
   for (const band of bands) {
     const values = population.filter((_, i) => populationGroup[i] === band.index)
-    drawHorizontalBoxplot(
-      g,
-      values,
-      popX,
-      band.boxTop + DOT_RADIUS,
-      band.boxAreaHeight - DOT_RADIUS * 2,
-      `pop-boxplot-${band.index}`,
-    )
+    if (showBoxplots) {
+      drawHorizontalBoxplot(
+        g,
+        values,
+        popX,
+        band.boxTop + DOT_RADIUS,
+        band.boxAreaHeight - DOT_RADIUS * 2,
+        `pop-boxplot-${band.index}`,
+      )
+    }
   }
 
   drawGroupBandGuides(g, bands, innerWidth, 'pop')
@@ -195,6 +222,7 @@ function drawPopulationOneNum(
   population: number[],
   populationStat: number | undefined,
   showPopulationStat: boolean,
+  showBoxplot: boolean,
   popX: d3.ScaleLinear<number, number>,
   popY: number[],
   dotAreaHeight: number,
@@ -217,6 +245,7 @@ function drawPopulationOneNum(
     .attr('fill-opacity', 0.55)
 
   d3.select(g).selectAll('.pop-stat-line').remove()
+  d3.select(g).selectAll('[class^="pop-boxplot"]').remove()
   if (showPopulationStat && populationStat != null && Number.isFinite(populationStat)) {
     d3.select(g)
       .append('line')
@@ -229,14 +258,16 @@ function drawPopulationOneNum(
       .attr('stroke-width', 2.5)
   }
 
-  drawHorizontalBoxplot(
-    g,
-    population,
-    popX,
-    boxTop + DOT_RADIUS,
-    boxAreaHeight - DOT_RADIUS * 2,
-    'pop-boxplot',
-  )
+  if (showBoxplot) {
+    drawHorizontalBoxplot(
+      g,
+      population,
+      popX,
+      boxTop + DOT_RADIUS,
+      boxAreaHeight - DOT_RADIUS * 2,
+      'pop-boxplot',
+    )
+  }
 }
 
 export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProps>(
@@ -251,6 +282,9 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       statistic,
       populationStat,
       showPopulationStat,
+      showFullPopulation,
+      moduleReady,
+      variableSupport,
       scales,
     },
     ref,
@@ -264,7 +298,12 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     const [size, setSize] = useState({ width: 720, height: 540 })
 
     const stat = statistic === 'median' ? 'median' : 'mean'
-    const numCatMode = nGroups >= 2 && groupLevels.length >= 2
+    const numCatMode =
+      variableSupport === 'num_cat' && nGroups >= 2 && groupLevels.length >= 2
+    const showData =
+      variableSupport === 'one_num' || variableSupport === 'num_cat'
+    const popDomain = effectivePopDomain(population, scales?.pop)
+    const distDomain = effectiveDistDomain([], scales?.dist)
 
     useEffect(() => {
       const el = containerRef.current
@@ -291,8 +330,8 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     } = usePaneLayout(size.width, size.height)
     const domains = domainsFromState(scales)
     const { popX, sampleX, distX } = useSamplingScales(
-      domains.pop,
-      domains.dist,
+      popDomain,
+      moduleReady ? domains.dist : distDomain,
       innerWidth,
       innerHeight,
     )
@@ -386,6 +425,11 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
 
       d3.select(g).selectAll('.pop-band-line, .pop-band-label').remove()
 
+      if (!showData || population.length === 0 || innerWidth <= 0) {
+        d3.select(g).selectAll('*').remove()
+        return
+      }
+
       if (numCatMode) {
         drawPopulationGrouped(
           g,
@@ -398,6 +442,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
           popX,
           popY,
           showPopulationStat,
+          showFullPopulation,
           innerWidth,
           innerHeight,
         )
@@ -407,6 +452,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
           population,
           populationStat,
           showPopulationStat,
+          showFullPopulation,
           popX,
           popY,
           dotAreaHeight,
@@ -416,6 +462,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
         )
       }
     }, [
+      showData,
       population,
       populationGroup,
       groupBands,
@@ -430,10 +477,20 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       boxAreaHeight,
       baselineY,
       showPopulationStat,
+      showFullPopulation,
       populationStat,
       innerWidth,
       innerHeight,
     ])
+
+    useEffect(() => {
+      const sampleG = sampleGroupRef.current
+      const distG = distGroupRef.current
+      if (!sampleG || !distG) return
+      if (moduleReady) return
+      d3.select(sampleG).selectAll('*').remove()
+      d3.select(distG).selectAll('*').remove()
+    }, [moduleReady])
 
     useEffect(() => {
       const g = distGroupRef.current
@@ -482,6 +539,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
           {PANE_LABELS.map((label, paneIndex) => {
             const yOffset = paneIndex * paneHeight
             const clipId = `pane-clip-${paneIndex}`
+            const message = paneMessage(paneIndex, variableSupport, moduleReady)
             return (
               <g key={label} transform={`translate(0, ${yOffset})`}>
                 <text
@@ -504,6 +562,17 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
                       <rect x={0} y={0} width={innerWidth} height={innerHeight} />
                     </clipPath>
                   </defs>
+                  {message && (
+                    <text
+                      x={innerWidth / 2}
+                      y={innerHeight / 2}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="fill-gray-400 text-sm"
+                    >
+                      {message}
+                    </text>
+                  )}
                   <g clipPath={`url(#${clipId})`}>
                     {paneIndex === 0 && (
                       <g ref={popGroupRef} transform="translate(0, 0)" />

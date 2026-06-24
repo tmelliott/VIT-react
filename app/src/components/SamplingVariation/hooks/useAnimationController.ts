@@ -32,6 +32,7 @@ import type { ThreePaneHandle } from '../ThreePaneDisplay'
 export function useAnimationController(
   state: SamplingVariationState | undefined,
   paneRef: RefObject<ThreePaneHandle | null>,
+  inferenceActive: boolean,
 ) {
   const [cursor, setCursor] = useState(0)
   const [phase, setPhase] = useState<AnimationPhase>('idle')
@@ -62,10 +63,10 @@ export function useAnimationController(
   }, [paneRef])
 
   useEffect(() => {
-    if (state?.status !== 'ready') {
+    if (state?.status !== 'ready' || !inferenceActive) {
       resetLocal()
     }
-  }, [state?.status, resetLocal])
+  }, [state?.status, inferenceActive, resetLocal])
 
   const runBatch = useCallback(
     async (mode: AnimationMode, m: MValue) => {
