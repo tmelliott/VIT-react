@@ -36,6 +36,7 @@ export type VitWidgetHook = UseWidgetReturn<
 
 export type SamplingVariationProperties = {
   variables: PropertyGet<string[]>
+  group_variables: PropertyGet<string[]>
   xvar: PropertyGet<string>
   yvar: PropertyGet<string>
   sample_size: PropertyGet<number>
@@ -44,6 +45,11 @@ export type SamplingVariationProperties = {
   progress: PropertyGet<number>
   error_message: PropertyGet<string>
   population: PropertyGet<Float64Array>
+  population_group: PropertyGet<Int32Array>
+  group_levels: PropertyGet<string[]>
+  group_stats: PropertyGet<Float64Array>
+  stat_kind: PropertyGet<string>
+  n_groups: PropertyGet<number>
   population_stat: PropertyGet<number>
   sample_stats: PropertyGet<Float64Array>
   sample_indices: PropertyGet<Int32Array>

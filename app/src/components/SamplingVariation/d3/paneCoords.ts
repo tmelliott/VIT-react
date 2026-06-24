@@ -1,4 +1,6 @@
 /** Layout constants shared between ThreePaneDisplay and animation code. */
+export const PANE = { DATA: 0, SAMPLE: 1, DIST: 2 } as const
+
 export type PaneLayout = {
   marginLeft: number
   plotTop: number

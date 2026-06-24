@@ -5,13 +5,26 @@
 import { Robj } from "rserve-ts";
 import { z } from "zod";
 
+/** Rserve may send length-0/1 character vectors as "" or a plain string. */
+const zStringArray = () =>
+  z
+    .union([z.array(z.string()), z.string(), z.undefined()])
+    .transform((val) => {
+      if (val === undefined) return undefined
+      if (Array.isArray(val)) return val
+      if (val === '') return []
+      return [val]
+    })
+
+
 export const samplingVariation = Robj.ocap(
   [
     z.union([
       Robj.js_function(
         [
           z.object({
-            variables: z.union([z.array(z.string()), z.undefined()]),
+            variables: zStringArray(),
+            group_variables: zStringArray(),
             xvar: z.union([z.string(), z.undefined()]),
             yvar: z.union([z.string(), z.undefined()]),
             sample_size: z.union([z.number(), z.undefined()]),
@@ -20,6 +33,14 @@ export const samplingVariation = Robj.ocap(
             progress: z.union([z.number(), z.undefined()]),
             error_message: z.union([z.string(), z.undefined()]),
             population: z.union([z.instanceof(Float64Array), z.undefined()]),
+            population_group: z.union([
+              z.instanceof(Int32Array),
+              z.undefined(),
+            ]),
+            group_levels: zStringArray(),
+            group_stats: z.union([z.instanceof(Float64Array), z.undefined()]),
+            stat_kind: z.union([z.string(), z.undefined()]),
+            n_groups: z.union([z.number(), z.undefined()]),
             population_stat: z.union([z.number(), z.undefined()]),
             sample_stats: z.union([z.instanceof(Float64Array), z.undefined()]),
             sample_indices: z.union([z.instanceof(Int32Array), z.undefined()]),
@@ -43,11 +64,19 @@ export const samplingVariation = Robj.ocap(
     properties: Robj.list({
       variables: Robj.list({
         register: Robj.ocap(
-          [Robj.js_function([z.array(z.string())], z.null()), z.string()],
+          [Robj.js_function([zStringArray()], z.null()), z.string()],
           Robj.character(1),
         ),
         get: Robj.ocap([], Robj.character(0)),
-        set: Robj.ocap([z.array(z.string())], Robj.null()),
+        set: Robj.ocap([zStringArray()], Robj.null()),
+      }),
+      group_variables: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([zStringArray()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(0)),
+        set: Robj.ocap([zStringArray()], Robj.null()),
       }),
       xvar: Robj.list({
         register: Robj.ocap(
@@ -115,6 +144,49 @@ export const samplingVariation = Robj.ocap(
         ),
         get: Robj.ocap([], Robj.numeric(0)),
         set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      population_group: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.instanceof(Int32Array)], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.integer(0)),
+        set: Robj.ocap([z.instanceof(Int32Array)], Robj.null()),
+      }),
+      group_levels: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([zStringArray()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(0)),
+        set: Robj.ocap([zStringArray()], Robj.null()),
+      }),
+      group_stats: Robj.list({
+        register: Robj.ocap(
+          [
+            Robj.js_function([z.instanceof(Float64Array)], z.null()),
+            z.string(),
+          ],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.numeric(0)),
+        set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      stat_kind: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.string()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(1)),
+        set: Robj.ocap([z.string()], Robj.null()),
+      }),
+      n_groups: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.number()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.integer(1)),
+        set: Robj.ocap([z.number()], Robj.null()),
       }),
       population_stat: Robj.list({
         register: Robj.ocap(

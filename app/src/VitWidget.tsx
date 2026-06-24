@@ -5,7 +5,7 @@ import type { VitAppShape, VitWidgetHook } from './rserve/vit.types'
 import { SamplingVariation } from './components/SamplingVariation'
 
 const DEFAULT_DATA_URL =
-  'https://vincentarelbundock.github.io/Rdatasets/csv/datasets/iris.csv'
+  'https://raw.githubusercontent.com/iNZightVIT/iNZightTools/refs/heads/dev/tests/testthat/cas500.csv'
 
 export function VitWidget() {
   const rserveHost =

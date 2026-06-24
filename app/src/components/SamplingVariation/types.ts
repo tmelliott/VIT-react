@@ -6,11 +6,37 @@ export type AnimationPhase = 'idle' | 'playing' | 'paused'
 
 export type MValue = 1 | 5 | 20 | 1000
 
+export type StatKind = 'difference' | 'average_deviation' | ''
+
 export function toNumberArray(
   data: Float64Array | number[] | undefined | null,
 ): number[] {
   if (data == null) return []
   return Array.from(data)
+}
+
+export function toIntArray(
+  data: Int32Array | number[] | undefined | null,
+): number[] {
+  if (data == null) return []
+  return Array.from(data)
+}
+
+export function toStringArray(
+  data: string[] | undefined | null,
+): string[] {
+  if (data == null) return []
+  return Array.from(data)
+}
+
+export function isNumCatMode(nGroups: number, yvar: string): boolean {
+  return yvar !== '' && nGroups >= 2
+}
+
+export function statKindLabel(kind: StatKind, nGroups: number): string {
+  if (kind === 'difference' || nGroups === 2) return 'Difference'
+  if (kind === 'average_deviation' || nGroups > 2) return 'Average deviation'
+  return ''
 }
 
 export function scaleDomain(
@@ -46,14 +72,12 @@ export function sampleIndexPoolSize(
 export const M1000_TARGET_MS = 5000
 export const M1000_BATCH = 10
 
-/** Animation steps for M=1000: batches of 10 reps per frame. */
 export function m1000StepCount(start: number, end: number): number {
   const reps = end - start
   if (reps <= 0) return 0
   return Math.ceil(reps / M1000_BATCH)
 }
 
-/** Per-step delay so the selected rep range finishes in ~5s for a full 1000-rep run. */
 export function m1000StepMs(start: number, end: number): number {
   const steps = m1000StepCount(start, end)
   if (steps <= 0) return 0

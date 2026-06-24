@@ -1,12 +1,17 @@
 type ConfigPanelProps = {
   variables: string[]
+  groupVariables: string[]
   xvar: string
+  yvar: string
   sampleSize: number
   statistic: string
+  statKindLabel: string
+  numCatMode: boolean
   status: string
   errorMessage: string
   maxSampleSize: number
   onXvarChange: (v: string) => void
+  onYvarChange: (v: string) => void
   onSampleSizeChange: (n: number) => void
   onStatisticChange: (s: string) => void
   onConfirm: () => void
@@ -14,22 +19,28 @@ type ConfigPanelProps = {
 
 export function ConfigPanel({
   variables,
+  groupVariables,
   xvar,
+  yvar,
   sampleSize,
   statistic,
+  statKindLabel,
+  numCatMode,
   status,
   errorMessage,
   maxSampleSize,
   onXvarChange,
+  onYvarChange,
   onSampleSizeChange,
   onStatisticChange,
   onConfirm,
 }: ConfigPanelProps) {
   const computing = status === 'computing'
+  const minSampleSize = numCatMode ? 2 : 1
   const canConfirm =
     variables.length > 0 &&
     xvar !== '' &&
-    sampleSize >= 1 &&
+    sampleSize >= minSampleSize &&
     sampleSize <= maxSampleSize &&
     !computing
 
@@ -39,7 +50,7 @@ export function ConfigPanel({
 
       <div className="flex flex-col gap-3">
         <label className="flex flex-col gap-1 text-sm">
-          Variable
+          Numeric variable
           <select
             className="border border-gray-300 rounded px-2 py-1 bg-white w-full"
             value={xvar}
@@ -59,11 +70,28 @@ export function ConfigPanel({
         </label>
 
         <label className="flex flex-col gap-1 text-sm">
+          Group variable
+          <select
+            className="border border-gray-300 rounded px-2 py-1 bg-white w-full"
+            value={yvar}
+            disabled={computing || groupVariables.length === 0}
+            onChange={(e) => onYvarChange(e.target.value)}
+          >
+            <option value="">None (one numeric)</option>
+            {groupVariables.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-sm">
           Sample size
           <input
             type="number"
-            min={1}
-            max={maxSampleSize || 1}
+            min={minSampleSize}
+            max={maxSampleSize || minSampleSize}
             className="border border-gray-300 rounded px-2 py-1 w-24 bg-white"
             value={sampleSize}
             disabled={computing}
@@ -83,6 +111,13 @@ export function ConfigPanel({
             <option value="median">Median</option>
           </select>
         </label>
+
+        {numCatMode && statKindLabel && (
+          <p className="text-sm text-gray-700">
+            Sample statistic:{' '}
+            <span className="font-medium">{statKindLabel}</span>
+          </p>
+        )}
 
         <button
           type="button"

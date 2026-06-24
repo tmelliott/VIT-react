@@ -20,6 +20,7 @@ import {
   m1000StepMs,
   timingForM,
   toNumberArray,
+  toIntArray,
   type AnimationMode,
   type AnimationPhase,
   type MValue,
@@ -55,6 +56,7 @@ export function useAnimationController(
         handle.distGroup,
         handle.flyGroup,
         false,
+        handle.numCatMode,
       )
     }
   }, [paneRef])
@@ -71,9 +73,11 @@ export function useAnimationController(
       if (!handle || !state || state.status !== 'ready') return
 
       const population = toNumberArray(state.population)
+      const populationGroup = toIntArray(state.population_group)
       const sampleStats = toNumberArray(state.sample_stats)
       const sampleSize = state.sample_size ?? 20
       const indices = state.sample_indices
+      const statistic = state.statistic === 'median' ? 'median' : 'mean'
       if (!indices || sampleStats.length === 0) return
 
       const distLayout = ensureDistLayout(
@@ -103,6 +107,9 @@ export function useAnimationController(
           flyGroup: handle.flyGroup,
           paneLayout: handle.paneLayout,
           population,
+          populationGroup: handle.numCatMode
+            ? populationGroup
+            : handle.populationGroup,
           popY: handle.popY,
           sampleIndices,
           sampleStat: sampleStats[repIndex]!,
@@ -121,6 +128,12 @@ export function useAnimationController(
           accumulateOnly,
           includeDist,
           replicateIndex: repIndex,
+          numCatMode: handle.numCatMode,
+          groupBands: handle.groupBands,
+          nGroups: handle.nGroups,
+          statistic: handle.statistic,
+          statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
+          paneInnerHeight: handle.paneInnerHeight,
         })
       }
 
@@ -133,12 +146,16 @@ export function useAnimationController(
             batchReps.push({
               replicateIndex: i,
               sampleStat: sampleStats[i]!,
+              sampleIndices: getSampleIndices(indices, sampleSize, i),
             })
           }
           await animateSampleBatch({
             sampleGroup: handle.sampleGroup,
             distGroup: handle.distGroup,
             population,
+            populationGroup: handle.numCatMode
+              ? populationGroup
+              : handle.populationGroup,
             showcaseSampleIndices: getSampleIndices(indices, sampleSize, r),
             sampleX: handle.sampleX,
             distX: handle.distX,
@@ -153,6 +170,12 @@ export function useAnimationController(
             timingMs,
             includeDist,
             reps: batchReps,
+            numCatMode: handle.numCatMode,
+            groupBands: handle.groupBands,
+            nGroups: handle.nGroups,
+            statistic: handle.statistic,
+            statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
+            paneInnerHeight: handle.paneInnerHeight,
           })
           r = batchEnd
         }
@@ -209,6 +232,7 @@ export function useAnimationController(
         handle.distGroup,
         handle.flyGroup,
         true,
+        handle.numCatMode,
       )
     }
   }, [paneRef])

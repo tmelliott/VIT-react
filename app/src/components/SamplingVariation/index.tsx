@@ -9,7 +9,13 @@ import { ConfigPanel } from './ConfigPanel'
 import { useAnimationController } from './hooks/useAnimationController'
 import { ProgressBar } from './ProgressBar'
 import { ThreePaneDisplay } from './ThreePaneDisplay'
-import { toNumberArray } from './types'
+import {
+  isNumCatMode,
+  statKindLabel,
+  toIntArray,
+  toNumberArray,
+  toStringArray,
+} from './types'
 
 export function SamplingVariation({
   module,
@@ -33,13 +39,21 @@ export function SamplingVariation({
   }
 
   const variables = state.variables ?? []
+  const groupVariables = state.group_variables ?? []
   const xvar = state.xvar ?? ''
+  const yvar = state.yvar ?? ''
   const sampleSize = state.sample_size ?? 20
   const statistic = state.statistic ?? 'mean'
   const moduleStatus = state.status ?? 'idle'
   const progress = state.progress ?? 0
   const errorMessage = state.error_message ?? ''
   const population = toNumberArray(state.population)
+  const populationGroup = toIntArray(state.population_group)
+  const groupLevels = toStringArray(state.group_levels)
+  const groupStats = toNumberArray(state.group_stats)
+  const nGroups = state.n_groups ?? 0
+  const statKind = (state.stat_kind ?? '') as '' | 'difference' | 'average_deviation'
+  const numCatMode = isNumCatMode(nGroups, yvar)
   const maxSampleSize = maxRows > 0 ? maxRows : Math.max(population.length, 1)
 
   return (
@@ -50,13 +64,18 @@ export function SamplingVariation({
         <aside className="flex w-full max-w-[360px] min-w-[240px] shrink-0 flex-1 flex-col gap-4 overflow-y-auto">
           <ConfigPanel
             variables={variables}
+            groupVariables={groupVariables}
             xvar={xvar}
+            yvar={yvar}
             sampleSize={sampleSize}
             statistic={statistic}
+            statKindLabel={statKindLabel(statKind, nGroups)}
+            numCatMode={numCatMode}
             status={moduleStatus}
             errorMessage={errorMessage}
             maxSampleSize={maxSampleSize}
             onXvarChange={(v) => void set('xvar', v)}
+            onYvarChange={(v) => void set('yvar', v)}
             onSampleSizeChange={(n) => void set('sample_size', n)}
             onStatisticChange={(s) => void set('statistic', s)}
             onConfirm={() => void methods?.record_choices?.()}
@@ -85,8 +104,17 @@ export function SamplingVariation({
           <ThreePaneDisplay
             ref={paneRef}
             population={population}
+            populationGroup={populationGroup}
+            groupLevels={groupLevels}
+            groupStats={groupStats}
+            nGroups={nGroups}
+            statKind={statKind}
+            statistic={statistic}
             populationStat={state.population_stat}
-            showPopulationStat={moduleStatus === 'ready'}
+            showPopulationStat={
+              moduleStatus === 'ready' ||
+              (numCatMode && population.length > 0 && moduleStatus === 'idle')
+            }
             scales={state.scales}
           />
         </main>

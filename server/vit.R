@@ -37,13 +37,20 @@ vitWidget <- createWidget(
         .self$dsInfo$ncols <- ncol(d)
 
         num_cols <- names(d)[vapply(d, is.numeric, logical(1))]
+        cat_cols <- categorical_column_names(d)
         child <- .self$samplingVariation
         child$vit <- .self
         child$set("variables", num_cols)
+        child$set("group_variables", cat_cols)
         if (length(num_cols) > 0L) {
           child$set("xvar", num_cols[[1L]])
         } else {
           child$set("xvar", "")
+        }
+        if (length(cat_cols) > 0L) {
+          child$set("yvar", cat_cols[[1L]])
+        } else {
+          child$set("yvar", "")
         }
         child$set("status", "idle")
         child$set("progress", 0L)
