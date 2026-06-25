@@ -45,9 +45,7 @@ TypeScript: the generated schema is checked with `@ts-nocheck` (full `z.infer` O
 
 ## Deploy (single container)
 
-The React app and Rserve run together in one image: **nginx** serves the Vite build and proxies `/rserve` to Rserve on `localhost:6311`. The browser reads the Rserve URL from **`RSERVE_HOST`** (runtime) via `public/rserve-config.js`; local dev uses **`VITE_RSERVE_HOST`** in `.env` instead. All app code goes through `getRserveHost()` in `src/lib/rserveHost.ts`.
-
-On Railway, set **`HOSTNAME`** to your public URL (or rely on **`RAILWAY_PUBLIC_DOMAIN`**, which the entrypoint picks up automatically) and the browser connects to `wss://<hostname>/rserve`.
+The React app and Rserve run together in one image: **nginx** serves the Vite build and proxies `/rserve` to Rserve on `localhost:6311`. The browser reads the Rserve URL from **`RSERVE_HOST`** (runtime, default `/rserve`) via `public/rserve-config.js`; local dev uses **`VITE_RSERVE_HOST`** in `.env` instead. All app code goes through `getRserveHost()` in `src/lib/rserveHost.ts`.
 
 ### Docker (local smoke test)
 
@@ -74,16 +72,14 @@ One service replaces a two-service setup (static app + separate Rserve).
    ```
 
 4. Generate a public domain in the Railway dashboard.
+5. Set **`RSERVE_HOST`** to your public Rserve WebSocket URL, e.g. `https://vit-react.up.railway.app/rserve` (`https://` is normalised to `wss://` at startup).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `8080` | Set by Railway automatically |
-| `HOSTNAME` | — | Public site URL (e.g. `https://vit.up.railway.app`); browser uses `wss://…/rserve` |
-| `RAILWAY_PUBLIC_DOMAIN` | — | Railway sets this; used when `HOSTNAME` is unset |
-| `RSERVE_PATH` | `/rserve` | Path appended when deriving from `HOSTNAME` |
-| `RSERVE_HOST` | derived | Override WebSocket URL/path entirely (skips `HOSTNAME` logic) |
+| `RSERVE_HOST` | `/rserve` | Rserve WebSocket URL/path for the browser |
 
-Local Docker without `HOSTNAME` falls back to same-origin `/rserve`. Override `RSERVE_HOST` only if Rserve is on a different path or host.
+Local Docker can omit `RSERVE_HOST` (same-origin `/rserve`). On Railway, set the full public URL including `/rserve`.
 
 ### Architecture
 

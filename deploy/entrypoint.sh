@@ -2,31 +2,13 @@
 set -euo pipefail
 
 PORT="${PORT:-8080}"
-RSERVE_PATH="${RSERVE_PATH:-/rserve}"
+RSERVE_HOST="${RSERVE_HOST:-/rserve}"
 
-# RSERVE_HOST: explicit WebSocket URL/path for the browser.
-# If unset, derive from HOSTNAME or Railway's RAILWAY_PUBLIC_DOMAIN + RSERVE_PATH.
-if [[ -z "${RSERVE_HOST:-}" ]]; then
-  base="${HOSTNAME:-}"
-  if [[ -z "$base" && -n "${RAILWAY_PUBLIC_DOMAIN:-}" ]]; then
-    base="https://${RAILWAY_PUBLIC_DOMAIN}"
-  fi
-
-  if [[ -n "$base" ]]; then
-    base="${base%/}"
-    if [[ "$base" != *://* ]]; then
-      base="https://${base}"
-    fi
-    case "$base" in
-      https://*) ws_base="wss://${base#https://}" ;;
-      http://*) ws_base="ws://${base#http://}" ;;
-      *) ws_base="$base" ;;
-    esac
-    RSERVE_HOST="${ws_base}${RSERVE_PATH}"
-  else
-    RSERVE_HOST="/rserve"
-  fi
-fi
+# Normalise http(s) URLs to ws(s) for the browser WebSocket client.
+case "$RSERVE_HOST" in
+  https://*) RSERVE_HOST="wss://${RSERVE_HOST#https://}" ;;
+  http://*) RSERVE_HOST="ws://${RSERVE_HOST#http://}" ;;
+esac
 
 # Runtime config for the browser (see app/src/lib/rserveHost.ts)
 escaped_host="${RSERVE_HOST//\\/\\\\}"
