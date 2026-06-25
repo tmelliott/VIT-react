@@ -38,7 +38,7 @@ COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 ENV PORT=8080
-ENV RSERVE_HOST=/rserve
+# RSERVE_HOST derived at runtime from HOSTNAME or RAILWAY_PUBLIC_DOMAIN (see deploy/entrypoint.sh)
 EXPOSE 8080
 
 CMD ["/entrypoint.sh"]

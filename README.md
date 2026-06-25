@@ -45,7 +45,9 @@ TypeScript: the generated schema is checked with `@ts-nocheck` (full `z.infer` O
 
 ## Deploy (single container)
 
-The React app and Rserve run together in one image: **nginx** serves the Vite build and proxies `/rserve` to Rserve on `localhost:6311`. The browser reads the Rserve URL from **`RSERVE_HOST`** (runtime, default `/rserve`) via `public/rserve-config.js`; local dev uses **`VITE_RSERVE_HOST`** in `.env` instead. All app code goes through `getRserveHost()` in `src/lib/rserveHost.ts`.
+The React app and Rserve run together in one image: **nginx** serves the Vite build and proxies `/rserve` to Rserve on `localhost:6311`. The browser reads the Rserve URL from **`RSERVE_HOST`** (runtime) via `public/rserve-config.js`; local dev uses **`VITE_RSERVE_HOST`** in `.env` instead. All app code goes through `getRserveHost()` in `src/lib/rserveHost.ts`.
+
+On Railway, set **`HOSTNAME`** to your public URL (or rely on **`RAILWAY_PUBLIC_DOMAIN`**, which the entrypoint picks up automatically) and the browser connects to `wss://<hostname>/rserve`.
 
 ### Docker (local smoke test)
 
@@ -76,9 +78,12 @@ One service replaces a two-service setup (static app + separate Rserve).
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `PORT` | `8080` | Set by Railway automatically |
-| `RSERVE_HOST` | `/rserve` | WebSocket URL/path the browser connects to |
+| `HOSTNAME` | — | Public site URL (e.g. `https://vit.up.railway.app`); browser uses `wss://…/rserve` |
+| `RAILWAY_PUBLIC_DOMAIN` | — | Railway sets this; used when `HOSTNAME` is unset |
+| `RSERVE_PATH` | `/rserve` | Path appended when deriving from `HOSTNAME` |
+| `RSERVE_HOST` | derived | Override WebSocket URL/path entirely (skips `HOSTNAME` logic) |
 
-Override `RSERVE_HOST` if Rserve is on a different path or host (e.g. `https://rserve.example.com`).
+Local Docker without `HOSTNAME` falls back to same-origin `/rserve`. Override `RSERVE_HOST` only if Rserve is on a different path or host.
 
 ### Architecture
 

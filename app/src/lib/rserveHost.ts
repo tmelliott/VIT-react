@@ -12,6 +12,7 @@ const LOCAL_DEV_HOST = 'http://127.0.0.1:6311'
  *
  * Resolution order:
  * 1. `window.__RSERVE_HOST__` — set at container startup from `RSERVE_HOST`
+ *    (or derived from `HOSTNAME` / `RAILWAY_PUBLIC_DOMAIN` + `/rserve` on Railway)
  * 2. `VITE_RSERVE_HOST` — Vite/.env at build time (local dev)
  * 3. `http://127.0.0.1:6311`
  */
