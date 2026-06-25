@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { RserveConnectionStatus } from '@tmelliott/react-rserve'
+import type { RserveConnectionStatus } from '../lib/rserveConnection'
 import {
   RserveConnectionContext,
   type RserveConnectionState,

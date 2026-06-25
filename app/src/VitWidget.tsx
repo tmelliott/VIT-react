@@ -1,6 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useRserve } from '@tmelliott/react-rserve'
-import vitAppSchema from './rserve/vit.rserve'
 import type { VitAppShape } from './rserve/vit.types'
 import { VitAppProvider } from './context/VitAppProvider'
 import { RserveConnectionProvider } from './context/RserveConnectionProvider'
@@ -8,6 +6,7 @@ import { AppRouter } from './AppRouter'
 import { RserveStatusBar } from './components/RserveStatusBar'
 import { RserveDisconnectOverlay } from './components/RserveDisconnectOverlay'
 import { getRserveHost } from './lib/rserveHost'
+import { useVitRserve } from './hooks/useVitRserve'
 
 export function VitWidget() {
   const rserveHost = getRserveHost()
@@ -18,9 +17,7 @@ export function VitWidget() {
     everConnected,
     reconnectAttempt,
     error,
-  } = useRserve(vitAppSchema, {
-    host: rserveHost,
-  })
+  } = useVitRserve(rserveHost)
 
   const shouldReloadAfterReconnect = useRef(false)
   const [pendingReload, setPendingReload] = useState(false)

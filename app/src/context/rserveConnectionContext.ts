@@ -1,5 +1,5 @@
 import { createContext } from 'react'
-import type { RserveConnectionStatus } from '@tmelliott/react-rserve'
+import type { RserveConnectionStatus } from '../lib/rserveConnection'
 
 export type RserveConnectionState = {
   host: string

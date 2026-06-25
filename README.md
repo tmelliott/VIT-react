@@ -33,7 +33,7 @@ Track implementation when deployment model is decided.
 
 ## Local packages
 
-`rserve-ts` (0.9.3) and `@tmelliott/react-rserve` (0.10.2) are installed from npm. After changing those libraries, reinstall and restart Vite.
+`rserve-ts` (0.9.3) and `@tmelliott/react-rserve` (0.10.2) are installed from npm for Docker/Railway. Local dev aliases the monorepo copies when present. The published `react-rserve` `useRserve` returns `loading` instead of `connectionStatus`; `useVitRserve` normalises both shapes.
 
 ## Sampling Variation (v1)
 
