@@ -92,3 +92,40 @@ export function timingForM(m: MValue): number {
   if (m === 20) return 100
   return m1000StepMs(0, 1000)
 }
+
+/** Per-step durations for the full P1→P2 sampling animation (user-adjustable later). */
+export type SampleAnimationTiming = {
+  /** Fade all population dots before highlighting the sample. */
+  popFadeMs: number
+  /** Interval between highlighting each sampled point in P1 (first few points). */
+  pointHighlightMs: number
+  /** Faster interval after the first {@link POINT_HIGHLIGHT_SLOW_COUNT} points. */
+  pointHighlightFastMs: number
+  /** Pause after the full sample is highlighted, before sliding to P2. */
+  sampleCompletePauseMs: number
+  /** Duration of the slide from P1 down to P2. */
+  slideToSampleMs: number
+  /** Pause after showing sample statistic(s) in P2. */
+  statDisplayPauseMs: number
+  /** K=2: animate dotted drop lines to the diff axis. */
+  twoGroupDropLineMs: number
+  /** K=2: pause after drop lines before drawing the diff arrow. */
+  twoGroupPreArrowPauseMs: number
+  /** K=2: draw the diff arrow. */
+  twoGroupArrowMs: number
+  /** K≥3: draw deviation arrows toward the grand-mean line. */
+  multiGroupArrowsMs: number
+}
+
+export const DEFAULT_SAMPLE_ANIMATION_TIMING: SampleAnimationTiming = {
+  popFadeMs: 300,
+  pointHighlightMs: 500,
+  pointHighlightFastMs: 50,
+  sampleCompletePauseMs: 1000,
+  slideToSampleMs: 2000,
+  statDisplayPauseMs: 1000,
+  twoGroupDropLineMs: 1000,
+  twoGroupPreArrowPauseMs: 500,
+  twoGroupArrowMs: 500,
+  multiGroupArrowsMs: 1000,
+}

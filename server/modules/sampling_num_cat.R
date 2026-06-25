@@ -81,15 +81,13 @@ sample_replicate_stat <- function(
         } else {
             sample_statistic(x, statistic)
         }
-        devs <- vapply(levels, function(g) {
-            if (!any(y == g)) {
-                return(NA_real_)
-            }
-            abs(sample_statistic(x[y == g], statistic) - ref_stat)
-        }, numeric(1))
-        if (any(is.na(devs))) {
+        present <- levels[vapply(levels, function(g) any(y == g), logical(1))]
+        if (length(present) == 0L) {
             return(NA_real_)
         }
+        devs <- vapply(present, function(g) {
+            abs(sample_statistic(x[y == g], statistic) - ref_stat)
+        }, numeric(1))
         mean(devs)
     }
 }
@@ -97,10 +95,6 @@ sample_replicate_stat <- function(
 sample_has_multiple_groups <- function(y, levels) {
     present <- levels[vapply(levels, function(g) any(y == g), logical(1))]
     length(present) >= 2L
-}
-
-sample_has_all_groups <- function(y, levels) {
-    all(vapply(levels, function(g) any(y == g), logical(1)))
 }
 
 compute_num_cat_sampling <- function(
@@ -150,9 +144,6 @@ compute_num_cat_sampling <- function(
             idx <- sample.int(n_pop, sample_size, replace = FALSE)
             sy <- y[idx]
             ok <- sample_has_multiple_groups(sy, levels)
-            if (n_groups >= 3L) {
-                ok <- ok && sample_has_all_groups(sy, levels)
-            }
             if (ok) {
                 break
             }
@@ -181,8 +172,12 @@ compute_num_cat_sampling <- function(
         dist_domain <- c(0, 1)
     }
     if (n_groups == 2L) {
-        span <- max(abs(dist_domain))
-        dist_domain <- c(-span, span)
+        pop_span <- diff(pop_domain)
+        if (!is.finite(pop_span) || pop_span <= 0) {
+            pop_span <- max(abs(dist_domain))
+        }
+        half <- pop_span / 2
+        dist_domain <- c(population_stat - half, population_stat + half)
     } else if (n_groups >= 3L) {
         pop_span <- diff(pop_domain)
         if (!is.finite(pop_span) || pop_span <= 0) {

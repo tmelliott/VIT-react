@@ -11,7 +11,7 @@ import { appendDistDotElement, distTarget, type DistLayout } from './distPhysics
 import { type StatKind } from './sampleStatSummary'
 import { twoGroupDiffZone, type GroupBand } from './groupLayout'
 import { PANE, type PaneLayout, toAbsolute } from './paneCoords'
-import { DIST_STAGE_DROP_OFFSET, DIST_STAGE_LINE_GAP, DIST_STAGE_Y } from './paneStyle'
+import { DIST_BARCODE_VLINE_COLOR, DIST_STAGE_DROP_OFFSET, DIST_STAGE_LINE_GAP, DIST_STAGE_Y } from './paneStyle'
 import type { AnimSignal } from './animateSample'
 
 export type DistArrowDropContext = {
@@ -41,6 +41,8 @@ export type DistArrowDropContext = {
   groupBands: GroupBand[]
   statistic: 'mean' | 'median'
   populationGrandStat: number
+  populationStat: number
+  statZoneTop: number
 }
 
 function delay(ms: number): Promise<void> {
@@ -86,6 +88,8 @@ export async function animateDistArrowDrop(
     groupBands,
     statistic,
     populationGrandStat,
+    populationStat,
+    statZoneTop,
   } = ctx
 
   if (signal.aborted) return
@@ -132,6 +136,7 @@ export async function animateDistArrowDrop(
       return
     }
 
+    const refStat = Number.isFinite(populationStat) ? populationStat : 0
     const diffZone = twoGroupDiffZone(paneInnerHeight)
     const startFrom = toAbsolute(
       paneLayout,
@@ -145,7 +150,7 @@ export async function animateDistArrowDrop(
       sampleX(high)!,
       diffZone.arrowY,
     )
-    const endFrom = toAbsolute(paneLayout, PANE.DIST, distX(0)!, distBaselineY)
+    const endFrom = toAbsolute(paneLayout, PANE.DIST, distX(refStat)!, distBaselineY)
     const endTo = toAbsolute(
       paneLayout,
       PANE.DIST,
@@ -181,7 +186,7 @@ export async function animateDistArrowDrop(
 
     drawHorizontalArrow(
       d3.select(distGroup),
-      distX(0)!,
+      distX(refStat)!,
       distX(sampleStat)!,
       distBaselineY,
       '#dc2626',
@@ -385,9 +390,9 @@ export async function animateDistArrowDrop(
     const line = flySel
       .append('line')
       .attr('class', 'dist-line-fly')
-      .attr('stroke', '#dc2626')
-      .attr('stroke-width', 2.5)
-      .attr('stroke-dasharray', '5,4')
+      .attr('stroke', DIST_BARCODE_VLINE_COLOR)
+      .attr('stroke-width', 2)
+      .attr('stroke-linecap', 'round')
 
     await transitionVerticalLine(
       line,

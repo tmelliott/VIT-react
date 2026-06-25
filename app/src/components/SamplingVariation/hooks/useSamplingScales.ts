@@ -12,11 +12,14 @@ export const BOX_AREA_FRACTION = 0.25
 export function paneRegions(
   innerHeight: number,
   radius = DOT_RADIUS,
-  options?: { showStatLabel?: boolean },
+  options?: { showStatLabel?: boolean; includeBox?: boolean },
 ) {
   const showStatLabel = options?.showStatLabel ?? false
+  const includeBox = options?.includeBox ?? true
   const markerHeight = statZoneHeight(showStatLabel)
-  const boxAreaHeight = Math.max(28, Math.floor(innerHeight * BOX_AREA_FRACTION))
+  const boxAreaHeight = includeBox
+    ? Math.max(28, Math.floor(innerHeight * BOX_AREA_FRACTION))
+    : 0
   const dotAreaHeight = innerHeight - boxAreaHeight - markerHeight
   const baselineY = dotAreaHeight - radius
   const statZoneTop = dotAreaHeight

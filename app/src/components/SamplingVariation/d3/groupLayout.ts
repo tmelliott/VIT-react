@@ -1,7 +1,7 @@
 import * as d3 from 'd3'
 import { BOX_AREA_FRACTION, paneRegions } from '../hooks/useSamplingScales'
 import { DOT_RADIUS, heapYFromXPositions, plotRangeMin } from './heapLayout'
-import { TWO_GROUP_DIFF_ZONE_HEIGHT } from './statMarker'
+import { TWO_GROUP_DIFF_ZONE_HEIGHT, SAMPLE_MEAN_STRIP_HEIGHT } from './statMarker'
 
 export const GROUP_COLORS = [
   '#2563eb',
@@ -15,6 +15,21 @@ export const GROUP_COLORS = [
 ]
 
 export { BOX_AREA_FRACTION, TWO_GROUP_DIFF_ZONE_HEIGHT }
+
+/** Arrow strip height under each dotplot row in P2 (K≥3 sample pane). */
+export const SAMPLE_BAND_ARROW_HEIGHT = 22
+/** Reserved space below group rows for the average deviation label (P2 K≥3). */
+export const SAMPLE_AVG_DEV_LABEL_HEIGHT = 20
+
+export type SampleAvgDevLabelZone = {
+  top: number
+  labelY: number
+}
+
+export function sampleAvgDevLabelZone(innerHeight: number): SampleAvgDevLabelZone {
+  const top = innerHeight - SAMPLE_AVG_DEV_LABEL_HEIGHT
+  return { top, labelY: top + SAMPLE_AVG_DEV_LABEL_HEIGHT - 6 }
+}
 
 export type GroupBand = {
   index: number
@@ -34,6 +49,11 @@ export function groupColor(index: number): string {
   return GROUP_COLORS[index % GROUP_COLORS.length]!
 }
 
+/** Vertical centre of the per-band deviation arrow row (P2 K≥3). */
+export function bandDeviationArrowY(band: GroupBand): number {
+  return band.top + band.dotAreaHeight + band.statZoneHeight / 2
+}
+
 export function computeGroupBands(
   innerHeight: number,
   groupLevels: string[],
@@ -45,7 +65,10 @@ export function computeGroupBands(
   const bandHeight = bandsHeight / n
   return groupLevels.map((label, index) => {
     const top = index * bandHeight
-    const regions = paneRegions(bandHeight, radius, { showStatLabel: false })
+    const regions = paneRegions(bandHeight, radius, {
+      showStatLabel: false,
+      includeBox: false,
+    })
     return {
       index,
       label,
@@ -60,6 +83,87 @@ export function computeGroupBands(
       color: groupColor(index),
     }
   })
+}
+
+/** P2 sample pane for K≥3: each group row = dotplot + deviation arrow strip beneath it. */
+export function computeSampleMultiGroupBands(
+  innerHeight: number,
+  groupLevels: string[],
+  radius = DOT_RADIUS,
+): GroupBand[] {
+  const n = Math.max(1, groupLevels.length)
+  const labelZone = sampleAvgDevLabelZone(innerHeight)
+  const bandsHeight = labelZone.top
+  const bandHeight = bandsHeight / n
+  const arrowZoneHeight = Math.min(
+    SAMPLE_BAND_ARROW_HEIGHT,
+    Math.max(16, Math.floor(bandHeight * 0.28)),
+  )
+  const dotAreaHeight = bandHeight - arrowZoneHeight
+
+  return groupLevels.map((label, index) => {
+    const top = index * bandHeight
+    const baselineY = top + dotAreaHeight - radius
+    return {
+      index,
+      label,
+      top,
+      height: bandHeight,
+      dotAreaHeight,
+      baselineY,
+      statZoneTop: top + dotAreaHeight,
+      statZoneHeight: arrowZoneHeight,
+      boxTop: top + bandHeight,
+      boxAreaHeight: 0,
+      color: groupColor(index),
+    }
+  })
+}
+
+/** P2 sample pane for K=2: dotplot + mean strip under each row, shared diff zone at bottom. */
+export function computeSampleTwoGroupBands(
+  innerHeight: number,
+  groupLevels: string[],
+  radius = DOT_RADIUS,
+): GroupBand[] {
+  const diffZone = twoGroupDiffZone(innerHeight)
+  const bandsHeight = diffZone.top
+  const bandHeight = bandsHeight / Math.max(2, groupLevels.length)
+  const markerHeight = SAMPLE_MEAN_STRIP_HEIGHT
+
+  return groupLevels.map((label, index) => {
+    const top = index * bandHeight
+    const dotAreaHeight = bandHeight - markerHeight
+    const baselineY = top + dotAreaHeight - radius
+    return {
+      index,
+      label,
+      top,
+      height: bandHeight,
+      dotAreaHeight,
+      baselineY,
+      statZoneTop: top + dotAreaHeight,
+      statZoneHeight: markerHeight,
+      boxTop: top + bandHeight,
+      boxAreaHeight: 0,
+      color: groupColor(index),
+    }
+  })
+}
+
+export function samplePaneGroupBands(
+  innerHeight: number,
+  groupLevels: string[],
+  nGroups: number,
+  radius = DOT_RADIUS,
+): GroupBand[] {
+  if (nGroups >= 3) {
+    return computeSampleMultiGroupBands(innerHeight, groupLevels, radius)
+  }
+  if (nGroups === 2) {
+    return computeSampleTwoGroupBands(innerHeight, groupLevels, radius)
+  }
+  return computeGroupBands(innerHeight, groupLevels, radius)
 }
 
 export type TwoGroupDiffZone = {
@@ -87,14 +191,49 @@ export function populationGrandStat(
   return d3.mean(population) ?? 0
 }
 
-/** Mean absolute deviation; NaN if any group stat is missing (matches R). */
+/** Mean absolute deviation over groups present in the sample only. */
 export function sampleAverageDeviation(
   groupStats: number[],
   grandStat: number,
 ): number {
   if (!Number.isFinite(grandStat)) return NaN
-  if (groupStats.some((s) => !Number.isFinite(s))) return NaN
   return averageDeviationFromGroups(groupStats, grandStat)
+}
+
+export function presentGroupIndices(
+  sampleIndices: number[],
+  populationGroup: number[],
+): Set<number> {
+  const present = new Set<number>()
+  for (const idx of sampleIndices) {
+    const g = populationGroup[idx]
+    if (g != null && g >= 0) present.add(g)
+  }
+  return present
+}
+
+export function syncSampleBandLabels(
+  sampleGroup: SVGGElement,
+  bands: GroupBand[],
+  sampleIndices: number[],
+  populationGroup: number[],
+): void {
+  const present = presentGroupIndices(sampleIndices, populationGroup)
+  const sel = d3.select(sampleGroup)
+  sel.selectAll('.sample-band-label').remove()
+  for (const band of bands) {
+    if (!present.has(band.index)) continue
+    sel
+      .append('text')
+      .attr('class', 'sample-band-label')
+      .attr('x', 4)
+      .attr('y', band.top + 12)
+      .attr('text-anchor', 'start')
+      .attr('font-size', 9)
+      .attr('fill', band.color)
+      .attr('font-weight', 600)
+      .text(band.label)
+  }
 }
 
 /** Mean absolute deviation of group stats from the overall population statistic. */

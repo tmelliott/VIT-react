@@ -70,7 +70,7 @@ compute_one_num_sampling <- function(
         }
     }
 
-    dist_domain <- scale_domain(sample_stats)
+    dist_domain <- pop_domain
 
     list(
         population = as.numeric(population),

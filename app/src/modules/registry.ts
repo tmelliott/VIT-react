@@ -14,7 +14,7 @@ export const vitModules: VitModuleDefinition[] = [
     path: '/sampvar',
     title: 'Sampling Variation',
     description:
-      'Take repeated samples from a population and see how sample statistics vary. Compare the sampling distribution to the population.',
+      'Take repeated samples without replacement from a population and see how sample statistics vary. The population is visible but treated as unknown during sampling.',
     available: true,
   },
   {

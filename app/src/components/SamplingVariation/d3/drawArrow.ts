@@ -242,13 +242,34 @@ export function transitionHorizontalLinesTo(
 }
 
 export function createHorizontalArrow(
-  g: d3.Selection<SVGGElement, unknown, null, undefined>,
+  parent: d3.Selection<SVGGElement, unknown, null, undefined>,
   color: string,
   opacity = 1,
   headSize = MAX_HEAD_PX,
+  options?: { minSpan?: number },
 ): HorizontalArrowHandle {
+  const minSpan = options?.minSpan ?? MIN_ARROW_SPAN_PX
+  const squeeze = minSpan === 0
+  const g = parent.append('g').attr('class', 'horizontal-arrow')
+
+  applyArrowStroke(
+    g.append('line').attr('class', 'arrow-shaft'),
+    color,
+    opacity,
+  )
+  applyArrowStroke(
+    g.append('line').attr('class', 'arrow-head arrow-head-a'),
+    color,
+    opacity,
+  )
+  applyArrowStroke(
+    g.append('line').attr('class', 'arrow-head arrow-head-b'),
+    color,
+    opacity,
+  )
+
   const setGeometry = (fromX: number, toX: number, y: number) => {
-    const expanded = expandArrowEndpoints(fromX, toX)
+    const expanded = expandArrowEndpoints(fromX, toX, minSpan)
     const diff = expanded.toX - expanded.fromX
     const shaft = g.select<SVGLineElement>('.arrow-shaft')
     const headA = g.select<SVGLineElement>('.arrow-head-a')
@@ -265,7 +286,7 @@ export function createHorizontalArrow(
       return
     }
 
-    const size = headSizeForSpan(diff, headSize)
+    const size = headSizeForSpan(diff, headSize, squeeze)
     const dir = diff > 0 ? 1 : -1
 
     shaft
@@ -273,6 +294,7 @@ export function createHorizontalArrow(
       .attr('x2', expanded.toX)
       .attr('y1', y)
       .attr('y2', y)
+      .attr('opacity', opacity)
     applyArrowStroke(shaft, color, opacity)
 
     headA
@@ -280,6 +302,7 @@ export function createHorizontalArrow(
       .attr('x2', expanded.toX - dir * size)
       .attr('y1', y)
       .attr('y2', y + size / 2)
+      .attr('opacity', opacity)
     applyArrowStroke(headA, color, opacity)
 
     headB
@@ -287,6 +310,7 @@ export function createHorizontalArrow(
       .attr('x2', expanded.toX - dir * size)
       .attr('y1', y)
       .attr('y2', y - size / 2)
+      .attr('opacity', opacity)
     applyArrowStroke(headB, color, opacity)
   }
 

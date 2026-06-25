@@ -70,3 +70,14 @@ export function distDomainAlignedToPop(
   if (!Number.isFinite(span) || span <= 0) return [0, 1]
   return [0, span]
 }
+
+/** P3 axis: same absolute span as pop/sample, centred on a reference value. */
+export function distDomainCenteredOn(
+  popDomain: [number, number],
+  center: number,
+): [number, number] {
+  const span = popDomain[1] - popDomain[0]
+  if (!Number.isFinite(span) || span <= 0) return [center - 0.5, center + 0.5]
+  const half = span / 2
+  return [center - half, center + half]
+}

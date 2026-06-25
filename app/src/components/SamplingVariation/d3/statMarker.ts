@@ -10,6 +10,9 @@ export const STAT_MARKER_RED = '#dc2626'
 /** Space reserved above the x-axis for the two-group difference display. */
 export const TWO_GROUP_DIFF_ZONE_HEIGHT = 36
 
+/** P2 sample pane: vertical space under dotplot for mean marker + barcode lines. */
+export const SAMPLE_MEAN_STRIP_HEIGHT = 42
+
 export function statZoneHeight(showStatLabel: boolean): number {
   return (
     STAT_GAP +

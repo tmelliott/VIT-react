@@ -23,7 +23,7 @@ export function drawReferenceStatLine(
     .attr('y1', y1)
     .attr('y2', y2 ?? innerHeight - 4)
     .attr('stroke', REFERENCE_STAT_COLOR)
-    .attr('stroke-width', 2)
+    .attr('stroke-width', 1.5)
     .attr('stroke-dasharray', '5,4')
 }
 

@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { LandingPage } from './components/LandingPage'
 import { RootLayout } from './routes/RootLayout'
+import { SamplingVariationDocsRoute } from './routes/SamplingVariationDocsRoute'
 import { SamplingVariationRoute } from './routes/SamplingVariationRoute'
 import { parseAppSearch } from './searchParams'
 
@@ -21,7 +22,13 @@ export const sampvarRoute = createRoute({
   component: SamplingVariationRoute,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, sampvarRoute])
+export const sampvarDocsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sampvar/docs',
+  component: SamplingVariationDocsRoute,
+})
+
+const routeTree = rootRoute.addChildren([indexRoute, sampvarRoute, sampvarDocsRoute])
 
 export const router = createRouter({
   routeTree,

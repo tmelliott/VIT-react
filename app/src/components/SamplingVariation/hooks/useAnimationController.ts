@@ -16,6 +16,7 @@ import {
 } from '../d3/animateSample'
 import {
   getSampleIndices,
+  DEFAULT_SAMPLE_ANIMATION_TIMING,
   M1000_BATCH,
   m1000StepMs,
   timingForM,
@@ -24,6 +25,7 @@ import {
   type AnimationMode,
   type AnimationPhase,
   type MValue,
+  type SampleAnimationTiming,
 } from '../types'
 import type { SamplingVariationState } from '../../rserve/vit.types'
 import { ensureDistLayout, useDistLayout } from './useDistLayout'
@@ -38,6 +40,9 @@ export function useAnimationController(
   const [phase, setPhase] = useState<AnimationPhase>('idle')
   const [samplingM, setSamplingM] = useState<MValue>(1)
   const [distM, setDistM] = useState<MValue>(1)
+  const [sampleTiming, setSampleTiming] = useState<SampleAnimationTiming>(
+    DEFAULT_SAMPLE_ANIMATION_TIMING,
+  )
   const signalRef = useRef<AnimSignal | null>(null)
   const { layoutRef: distLayoutRef, keyRef: distLayoutKeyRef } = useDistLayout(
     state,
@@ -126,17 +131,19 @@ export function useAnimationController(
           statZoneTop: handle.statZoneTop,
           signal,
           timingMs,
+          sampleTiming,
           fullAnimation,
           accumulateOnly,
           includeDist,
           replicateIndex: repIndex,
           numCatMode: handle.numCatMode,
-          groupBands: handle.groupBands,
+          groupBands: handle.sampleGroupBands,
           nGroups: handle.nGroups,
           statistic: handle.statistic,
           statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
           paneInnerHeight: handle.paneInnerHeight,
           populationGrandStat: handle.grandMean,
+          populationStat: state.population_stat ?? 0,
         })
       }
 
@@ -175,12 +182,13 @@ export function useAnimationController(
             includeDist,
             reps: batchReps,
             numCatMode: handle.numCatMode,
-            groupBands: handle.groupBands,
+            groupBands: handle.sampleGroupBands,
             nGroups: handle.nGroups,
             statistic: handle.statistic,
             statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
             paneInnerHeight: handle.paneInnerHeight,
             populationGrandStat: handle.grandMean,
+            populationStat: state.population_stat ?? 0,
           })
           r = batchEnd
         }
@@ -201,7 +209,7 @@ export function useAnimationController(
       setPhase('idle')
       signalRef.current = null
     },
-    [cursor, paneRef, state],
+    [cursor, paneRef, state, sampleTiming],
   )
 
   const onGo = useCallback(
@@ -251,6 +259,8 @@ export function useAnimationController(
     phase,
     samplingM,
     distM,
+    sampleTiming,
+    setSampleTiming,
     setSamplingM,
     setDistM,
     onGo,

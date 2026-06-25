@@ -19,19 +19,42 @@ function grandStatLabel(statistic: 'mean' | 'median'): string {
   return statistic === 'median' ? 'population median' : 'population mean'
 }
 
+/** Shared note: population visible but treated as unknown during sampling. */
+function populationPhilosophyNote(): ReactNode {
+  return (
+    <p>
+      Your dataset is treated as the <strong>population</strong>. Although it is visible here,
+      the sampling process treats it as <em>unknown</em> — as in a real study where you cannot
+      observe the whole population before sampling.
+    </p>
+  )
+}
+
+/** Shared note: SRS without replacement, no prior knowledge of levels. */
+function samplingPhilosophyNote(): ReactNode {
+  return (
+    <p>
+      Samples are drawn <strong>without replacement</strong> from the pooled population, with no
+      prior knowledge of existing group levels or proportions. Each individual can appear at most
+      once per sample.
+    </p>
+  )
+}
+
 function p1OneNum(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNode } {
   const sym = statSymbol(ctx.statistic)
   const label = ctx.statistic === 'median' ? 'median' : 'mean'
   return {
     summary: (
       <p>
-        The full dataset: each dot is one observation. The summary statistic marks the{' '}
-        <strong>{label}</strong> of all values — the population parameter we compare samples
-        against later.
+        The full dataset — treated as the <strong>population</strong>. Each dot is one
+        observation. The summary statistic marks the <strong>{label}</strong> of all values; this
+        is the parameter sample estimates will vary around.
       </p>
     ),
     details: (
       <>
+        {populationPhilosophyNote()}
         <p>
           With <em>n</em> observations <em>x</em>
           <sub>1</sub>, …, <em>x</em>
@@ -51,8 +74,8 @@ function p1OneNum(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNod
           </p>
         )}
         <p>
-          The dashed red reference in the sample and sampling-distribution panes is this same
-          value.
+        The soft gray reference in the sample and sampling-distribution panes is this same
+        value.
         </p>
       </>
     ),
@@ -64,13 +87,14 @@ function p1TwoGroup(ctx: PaneHelpContext): { summary: ReactNode; details: ReactN
   return {
     summary: (
       <p>
-        The full dataset split by group. Each group has its own {ctx.statistic}; the summary is
-        the <strong>difference</strong> between the two group statistics (higher group minus
+        The full population split by group. Each group has its own {ctx.statistic}; the summary
+        is the <strong>difference</strong> between the two group statistics (higher group minus
         lower group, ordered by population stat).
       </p>
     ),
     details: (
       <>
+        {populationPhilosophyNote()}
         <p>
           For groups 1 and 2 with {ctx.statistic}s {sym}
           <sub>1</sub> and {sym}
@@ -98,13 +122,14 @@ function p1MultiGroup(ctx: PaneHelpContext): { summary: ReactNode; details: Reac
   return {
     summary: (
       <p>
-        The full dataset with <em>K</em> = {ctx.nGroups} groups. The dashed vertical line is
+        The full population with <em>K</em> = {ctx.nGroups} groups. The dashed vertical line is
         the {grand}. The summary is the <strong>average deviation</strong>: mean arrow length
         from each group stat to that centre.
       </p>
     ),
     details: (
       <>
+        {populationPhilosophyNote()}
         <p>
           Let {sym}
           <sub>k</sub> be the group {ctx.statistic} and {sym} the overall {ctx.statistic} of
@@ -118,7 +143,7 @@ function p1MultiGroup(ctx: PaneHelpContext): { summary: ReactNode; details: Reac
         <p>
           Blue arrows show |{sym}
           <sub>k</sub> − {sym}| for each group. The label “Average deviation = …” is{' '}
-          <em>D</em>. The red dotted line in P3 marks this population value.
+          <em>D</em>. The gray reference line in P3 marks this population value.
         </p>
       </>
     ),
@@ -132,28 +157,27 @@ function p2Content(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNo
       ? 'simple random sample without replacement'
       : 'simple random sample without replacement from the pooled population'
 
-  const summary =
-    ctx.paneIndex === 1 ? (
-      <p>
-        One random sample of size <strong>{n}</strong>: {sampling}. Grey dots are the chosen
-        observations; markers show the sample statistic (same definition as P1, but computed
-        from the sample only).
-      </p>
-    ) : (
-      <p>Sample pane help.</p>
-    )
+  const summary = (
+    <p>
+      One random sample of size <strong>{n}</strong>: {sampling}. Grey dots are the chosen
+      observations; markers show the sample statistic (same definition as P1, but computed from
+      the sample only).
+    </p>
+  )
 
   const details = (
     <>
+      {samplingPhilosophyNote()}
       <p>
-        Each time you press Go, a new sample is drawn: <em>n</em> distinct individuals from
-        the population (without replacement), so no row appears twice in one sample.
+        Each time you press Go, a new sample is drawn: <em>n</em> distinct individuals from the
+        population (without replacement), so no row appears twice in one sample.
       </p>
       {ctx.variableSupport === 'num_cat' && ctx.nGroups >= 3 && (
         <p>
           For multiple groups, sample group {ctx.statistic}s are compared to the{' '}
           <strong>{grandStatLabel(ctx.statistic)}</strong> from P1 (fixed centre), not the
-          sample&apos;s own overall {ctx.statistic}.
+          sample&apos;s own overall {ctx.statistic}. If a group is missing from the sample,
+          it is omitted from the average deviation (divided by the number of groups present).
         </p>
       )}
       {ctx.variableSupport === 'num_cat' && ctx.nGroups === 2 && (
@@ -165,7 +189,7 @@ function p2Content(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNo
       {ctx.variableSupport === 'one_num' && (
         <p>
           The sample {ctx.statistic} is compared visually to the population {ctx.statistic}{' '}
-          (red dotted line).
+          (gray reference line).
         </p>
       )}
       <p>
@@ -184,12 +208,16 @@ function p3OneNum(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNod
     summary: (
       <p>
         Each dot is the sample {ctx.statistic} from one replicate. Stacking shows how often
-        similar values occur. The red dotted line is the population {sym} from P1 — with many
-        replicates, the pile should centre near it.
+        similar values occur. The gray reference line is the population {sym} from P1 — with many
+        replicates, the pile should centre near it, illustrating <strong>sampling variation</strong>.
       </p>
     ),
     details: (
       <>
+        <p>
+          This pane demonstrates the core goal of the module: how sample estimates vary from
+          draw to draw, and how they cluster around the true population parameter.
+        </p>
         <p>
           After Confirm, the module pre-computes 1000 samples. Each contributes one value (sample{' '}
           {ctx.statistic}) to this distribution.
@@ -215,7 +243,7 @@ function p3TwoGroup(ctx: PaneHelpContext): { summary: ReactNode; details: ReactN
       <p>
         Each dot is the sample difference ({sym}
         <sub>2</sub> − {sym}
-        <sub>1</sub>) from one replicate. The red line is the population difference from P1.
+        <sub>1</sub>) from one replicate. The gray line is the population difference from P1.
       </p>
     ),
     details: (
@@ -245,7 +273,7 @@ function p3MultiGroup(ctx: PaneHelpContext): { summary: ReactNode; details: Reac
     summary: (
       <p>
         Each dot is one replicate&apos;s <strong>average deviation</strong> — the same measure
-        as P1, but using sample group stats. The red line is the population value{' '}
+        as P1, but using sample group stats. The gray line is the population value{' '}
         <em>D</em> from P1.
       </p>
     ),
@@ -278,15 +306,20 @@ function emptyPane(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNo
   return {
     summary: (
       <p>
-        Select variables and confirm settings to see the {labels[ctx.paneIndex]} pane in
-        action.
+        Select variables and confirm settings to see the {labels[ctx.paneIndex]} pane in action.
+        This module explores <strong>sampling variation</strong>: how sample statistics differ
+        when you repeatedly draw random samples from a fixed population.
       </p>
     ),
     details: (
-      <p>
-        Choose a numeric primary variable (and optionally a grouping variable), set sample size
-        and statistic, then click Confirm.
-      </p>
+      <>
+        {populationPhilosophyNote()}
+        {samplingPhilosophyNote()}
+        <p>
+          Choose a numeric primary variable (and optionally a grouping variable), set sample size
+          and statistic, then click Confirm.
+        </p>
+      </>
     ),
   }
 }
