@@ -85,7 +85,14 @@ vitWidget <- createWidget(
   ),
   export = TRUE
 )
+
+ping <- ts_function(
+  function() NULL,
+  result = ts_null(),
+  export = TRUE
+)
 first.fns <- function() ts_app(list(
+   ping = ping,
    vitWidget = vitWidget
 ))
 

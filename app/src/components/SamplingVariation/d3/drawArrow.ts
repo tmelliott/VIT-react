@@ -10,9 +10,12 @@ const MIN_ARROW_SPAN_PX = 14
 const MIN_HEAD_PX = 5
 const MAX_HEAD_PX = 8
 
-function headSizeForSpan(span: number, headSize = MAX_HEAD_PX): number {
+function headSizeForSpan(span: number, headSize = MAX_HEAD_PX, squeeze = false): number {
   const abs = Math.abs(span)
   if (abs < 0.5) return 0
+  if (squeeze) {
+    return Math.max(3, Math.min(7, abs * 0.55))
+  }
   return Math.max(MIN_HEAD_PX, Math.min(headSize, abs * 0.45))
 }
 
@@ -62,15 +65,18 @@ export function drawHorizontalArrow(
   color: string,
   opacity = 1,
   headSize = MAX_HEAD_PX,
+  options?: { minSpan?: number },
 ): d3.Selection<SVGGElement, unknown, null, undefined> {
+  const minSpan = options?.minSpan ?? MIN_ARROW_SPAN_PX
+  const squeeze = minSpan === 0
   const g = parent.append('g').attr('class', 'horizontal-arrow')
-  const expanded = expandArrowEndpoints(fromX, toX)
+  const expanded = expandArrowEndpoints(fromX, toX, minSpan)
   const diff = expanded.toX - expanded.fromX
   if (!Number.isFinite(expanded.fromX) || !Number.isFinite(expanded.toX) || Math.abs(diff) < 0.5) {
     return g
   }
 
-  const size = headSizeForSpan(diff, headSize)
+  const size = headSizeForSpan(diff, headSize, squeeze)
   const dir = diff > 0 ? 1 : -1
 
   applyArrowStroke(
@@ -110,6 +116,129 @@ export function drawHorizontalArrow(
   )
 
   return g
+}
+
+/** Plain horizontal segment (no arrowhead). */
+export function drawHorizontalLine(
+  parent: d3.Selection<SVGGElement, unknown, null, undefined>,
+  fromX: number,
+  toX: number,
+  y: number,
+  color: string,
+  opacity = 1,
+  options?: { minSpan?: number },
+): d3.Selection<SVGLineElement, unknown, null, undefined> {
+  const minSpan = options?.minSpan ?? MIN_ARROW_SPAN_PX
+  const expanded = expandArrowEndpoints(fromX, toX, minSpan)
+  const line = parent
+    .append('line')
+    .attr('x1', expanded.fromX)
+    .attr('x2', expanded.toX)
+    .attr('y1', y)
+    .attr('y2', y)
+  applyArrowStroke(line, color, opacity)
+  return line
+}
+
+export function transitionHorizontalLine(
+  line: d3.Selection<SVGLineElement, unknown, null, undefined>,
+  x1: number,
+  x2: number,
+  y: number,
+  endX1: number,
+  endX2: number,
+  endY: number,
+  duration: number,
+): Promise<void> {
+  line.attr('x1', x1).attr('x2', x2).attr('y1', y).attr('y2', y)
+
+  if (duration <= 0 || line.empty()) {
+    line.attr('x1', endX1).attr('x2', endX2).attr('y1', endY).attr('y2', endY)
+    return Promise.resolve()
+  }
+
+  return line
+    .transition()
+    .duration(duration)
+    .attr('x1', endX1)
+    .attr('x2', endX2)
+    .attr('y1', endY)
+    .attr('y2', endY)
+    .end()
+    .then(() => undefined)
+}
+
+/** Move a set of horizontal lines down by the same amount in one step. */
+export function transitionHorizontalLinesByDy(
+  lines: d3.Selection<SVGLineElement, unknown, null, undefined>,
+  dy: number,
+  duration: number,
+): Promise<void> {
+  if (lines.empty() || dy === 0) return Promise.resolve()
+
+  if (duration <= 0) {
+    lines.each(function () {
+      const y = Number(d3.select(this).attr('y1'))
+      d3.select(this).attr('y1', y + dy).attr('y2', y + dy)
+    })
+    return Promise.resolve()
+  }
+
+  const transitions = lines.nodes().map((node) => {
+    const sel = d3.select(node)
+    const y = Number(sel.attr('y1'))
+    return sel
+      .transition()
+      .duration(duration)
+      .attr('y1', y + dy)
+      .attr('y2', y + dy)
+      .end()
+  })
+  return Promise.all(transitions).then(() => undefined)
+}
+
+/** Animate horizontal line to new x endpoints and y (reads current attrs as start). */
+export function transitionHorizontalLineTo(
+  line: d3.Selection<SVGLineElement, unknown, null, undefined>,
+  endX1: number,
+  endX2: number,
+  endY: number,
+  duration: number,
+): Promise<void> {
+  if (line.empty()) return Promise.resolve()
+
+  if (duration <= 0) {
+    line.attr('x1', endX1).attr('x2', endX2).attr('y1', endY).attr('y2', endY)
+    return Promise.resolve()
+  }
+
+  return line
+    .transition()
+    .duration(duration)
+    .attr('x1', endX1)
+    .attr('x2', endX2)
+    .attr('y1', endY)
+    .attr('y2', endY)
+    .end()
+    .then(() => undefined)
+}
+
+export function transitionHorizontalLinesTo(
+  lines: d3.Selection<SVGLineElement, unknown, null, undefined>,
+  endForLine: (line: SVGLineElement) => { x1: number; x2: number; y: number },
+  duration: number,
+): Promise<void> {
+  if (lines.empty()) return Promise.resolve()
+  const transitions = lines.nodes().map((node) =>
+    transitionHorizontalLineTo(
+      d3.select(node),
+      endForLine(node).x1,
+      endForLine(node).x2,
+      endForLine(node).y,
+      duration,
+    ),
+  )
+  return Promise.all(transitions).then(() => undefined)
 }
 
 export function createHorizontalArrow(
@@ -227,6 +356,8 @@ export function transitionHorizontalArrow(
       .attr('y2', endY - endHead / 2)
     return Promise.resolve()
   }
+
+  if (shaft.empty()) return Promise.resolve()
 
   const shaftTween = shaft
     .transition()

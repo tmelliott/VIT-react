@@ -11,14 +11,22 @@ import {
   type GroupBand,
 } from './groupLayout'
 import { heapYValues } from './heapLayout'
-import { animateDistArrowDrop } from './distArrowDrop'
+import { animateDistArrowDrop, removeDistTransientOverlays } from './distArrowDrop'
 import {
   appendSampleStatSummary,
-  fadePreviousSampleSummaries,
+  removeSampleStatSummaries,
   type StatKind,
 } from './sampleStatSummary'
+import { appendStatMarker } from './statMarker'
+import { twoGroupDiffZone } from './groupLayout'
+import {
+  DIST_DOT_COLOR,
+  DIST_DOT_OPACITY,
+  PREVIOUS_STAT_OPACITY,
+  SAMPLE_DOT_COLOR,
+  SAMPLE_DOT_OPACITY,
+} from './paneStyle'
 import { type PaneLayout, PANE, toAbsolute, toLocal } from './paneCoords'
-const PREVIOUS_STAT_OPACITY = 0.2
 
 export type AnimSignal = {
   aborted: boolean
@@ -99,19 +107,21 @@ async function fadePreviousStatLines(
   sampleGroup: SVGGElement,
   signal: AnimSignal,
   timingMs: number,
+  numCatMode: boolean,
 ): Promise<void> {
+  removeSampleStatSummaries(sampleGroup)
+  if (!numCatMode) {
+    d3.select(sampleGroup).selectAll('.sample-stat-triangle, .sample-stat-label').remove()
+  }
+
   const existing = d3
     .select(sampleGroup)
     .selectAll<SVGLineElement, unknown>('.sample-stat-line')
-  if (existing.empty()) {
-    await fadePreviousSampleSummaries(sampleGroup, signal, timingMs)
-    return
-  }
+  if (existing.empty()) return
 
   const duration = timingMs > 0 ? Math.min(300, timingMs * 0.3) : 0
   if (duration <= 0 || signal.aborted) {
     existing.attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-    await fadePreviousSampleSummaries(sampleGroup, signal, timingMs)
     return
   }
 
@@ -122,7 +132,37 @@ async function fadePreviousStatLines(
       .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
       .on('end', () => resolve())
   })
-  await fadePreviousSampleSummaries(sampleGroup, signal, timingMs)
+}
+
+function appendOneNumSampleStat(
+  sampleGroup: SVGGElement,
+  sampleX: d3.ScaleLinear<number, number>,
+  sampleStat: number,
+  statZoneTop: number,
+  boxTop: number,
+  boxAreaHeight: number,
+  dotRadius: number,
+  replicateIndex: number,
+) {
+  const x = sampleX(sampleStat)!
+  const lineTop = statZoneTop + 6 + 8
+  const lineBottom = boxTop + boxAreaHeight - dotRadius
+  d3.select(sampleGroup)
+    .append('line')
+    .attr('class', 'sample-stat-line')
+    .attr('data-index', replicateIndex)
+    .attr('x1', x)
+    .attr('x2', x)
+    .attr('y1', lineTop)
+    .attr('y2', lineBottom)
+    .attr('stroke', '#111827')
+    .attr('stroke-width', 2)
+    .attr('stroke-opacity', 1)
+
+  appendStatMarker(sampleGroup, x, statZoneTop, sampleStat, {
+    showLabel: false,
+    classPrefix: 'sample-stat',
+  })
 }
 
 function appendSampleStatLine(
@@ -182,13 +222,13 @@ function appendGroupedSampleStats(
   sampleX: d3.ScaleLinear<number, number>,
   groupStats: number[],
   bands: GroupBand[],
-  sampleIndices: number[],
-  population: number[],
+  populationGrandStat: number,
   statistic: 'mean' | 'median',
   statKind: StatKind,
   nGroups: number,
   replicateIndex: number,
   paneInnerHeight: number,
+  showSummary: boolean,
 ) {
   appendGroupedSampleStatLines(
     sampleGroup,
@@ -197,18 +237,19 @@ function appendGroupedSampleStats(
     bands,
     replicateIndex,
   )
+  if (!showSummary) return
   appendSampleStatSummary(
     sampleGroup,
     sampleX,
     groupStats,
     bands,
-    sampleIndices,
-    population,
+    populationGrandStat,
     statistic,
     statKind,
     nGroups,
     replicateIndex,
     paneInnerHeight,
+    twoGroupDiffZone(paneInnerHeight),
   )
 }
 
@@ -244,8 +285,8 @@ function drawSampleDots(
         .attr('cx', (_, j) => sampleX(values[j]!)!)
         .attr('cy', (_, j) => sampleY[j]!)
         .attr('r', dotRadius)
-        .attr('fill', band.color)
-        .attr('fill-opacity', 0.75)
+        .attr('fill', SAMPLE_DOT_COLOR)
+        .attr('fill-opacity', SAMPLE_DOT_OPACITY)
     }
     return
   }
@@ -260,8 +301,8 @@ function drawSampleDots(
     .attr('cx', (_, j) => sampleX(sampleValues[j]!)!)
     .attr('cy', (_, j) => sampleY[j]!)
     .attr('r', dotRadius)
-    .attr('fill', '#2563eb')
-    .attr('fill-opacity', 0.7)
+    .attr('fill', SAMPLE_DOT_COLOR)
+    .attr('fill-opacity', SAMPLE_DOT_OPACITY)
 }
 
 export type SampleBatchRep = {
@@ -285,6 +326,7 @@ export type SampleBatchAnimContext = {
   dotRadius: number
   boxTop: number
   boxAreaHeight: number
+  statZoneTop: number
   signal: AnimSignal
   timingMs: number
   includeDist: boolean
@@ -295,6 +337,7 @@ export type SampleBatchAnimContext = {
   statistic: 'mean' | 'median'
   statKind: StatKind
   paneInnerHeight: number
+  populationGrandStat: number
 }
 
 export async function animateSampleBatch(
@@ -315,6 +358,7 @@ export async function animateSampleBatch(
     dotRadius,
     boxTop,
     boxAreaHeight,
+    statZoneTop,
     signal,
     timingMs,
     includeDist,
@@ -325,6 +369,7 @@ export async function animateSampleBatch(
     statistic,
     statKind,
     paneInnerHeight,
+    populationGrandStat,
   } = ctx
 
   if (signal.aborted || reps.length === 0) return
@@ -344,7 +389,7 @@ export async function animateSampleBatch(
   d3.select(sampleGroup)
     .selectAll<SVGLineElement, unknown>('.sample-stat-line')
     .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-  await fadePreviousSampleSummaries(sampleGroup, signal, 0)
+  removeSampleStatSummaries(sampleGroup)
 
   for (const rep of reps) {
     if (numCatMode) {
@@ -360,13 +405,13 @@ export async function animateSampleBatch(
         sampleX,
         groupStats,
         groupBands,
-        rep.sampleIndices,
-        population,
+        populationGrandStat,
         statistic,
         statKind,
         nGroups,
         rep.replicateIndex,
         paneInnerHeight,
+        false,
       )
     } else {
       appendSampleStatLine(
@@ -383,6 +428,7 @@ export async function animateSampleBatch(
 
   if (includeDist) {
     for (const rep of sortRepsByDistY(reps, distLayout)) {
+      if (!Number.isFinite(rep.sampleStat)) continue
       const target = distTarget(
         distLayout,
         rep.replicateIndex,
@@ -390,6 +436,7 @@ export async function animateSampleBatch(
         rep.sampleStat,
         distBaselineY,
       )
+      if (!target) continue
       appendDistDotElement(
         distGroup,
         rep.replicateIndex,
@@ -425,6 +472,7 @@ export type SampleAnimContext = {
   dotRadius: number
   boxTop: number
   boxAreaHeight: number
+  statZoneTop: number
   signal: AnimSignal
   timingMs: number
   fullAnimation: boolean
@@ -437,6 +485,7 @@ export type SampleAnimContext = {
   statistic: 'mean' | 'median'
   statKind: StatKind
   paneInnerHeight: number
+  populationGrandStat: number
 }
 
 export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
@@ -460,6 +509,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     dotRadius,
     boxTop,
     boxAreaHeight,
+    statZoneTop,
     signal,
     timingMs,
     fullAnimation,
@@ -472,6 +522,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     statistic,
     statKind,
     paneInnerHeight,
+    populationGrandStat,
   } = ctx
 
   if (signal.aborted) return
@@ -499,25 +550,27 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     : []
 
   const appendStats = () => {
+    const showSummary = !accumulateOnly
     if (numCatMode) {
       appendGroupedSampleStats(
         sampleGroup,
         sampleX,
         groupStats,
         groupBands,
-        sampleIndices,
-        population,
+        populationGrandStat,
         statistic,
         statKind,
         nGroups,
         replicateIndex,
         paneInnerHeight,
+        showSummary,
       )
     } else {
-      appendSampleStatLine(
+      appendOneNumSampleStat(
         sampleGroup,
         sampleX,
         sampleStat,
+        statZoneTop,
         boxTop,
         boxAreaHeight,
         dotRadius,
@@ -536,12 +589,12 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     d3.select(sampleGroup)
       .selectAll<SVGLineElement, unknown>('.sample-stat-line')
       .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-    await fadePreviousSampleSummaries(sampleGroup, signal, 0)
+    removeSampleStatSummaries(sampleGroup)
     if (signal.aborted) return
 
     appendStats()
 
-    if (includeDist) {
+    if (includeDist && Number.isFinite(sampleStat)) {
       const target = distTarget(
         distLayout,
         replicateIndex,
@@ -549,14 +602,16 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         sampleStat,
         distBaselineY,
       )
-      appendDistDotElement(
-        distGroup,
-        replicateIndex,
-        sampleStat,
-        target.x,
-        target.y,
-        dotRadius,
-      )
+      if (target) {
+        appendDistDotElement(
+          distGroup,
+          replicateIndex,
+          sampleStat,
+          target.x,
+          target.y,
+          dotRadius,
+        )
+      }
     }
 
     await delay(timingMs, signal)
@@ -594,11 +649,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
       .join('circle')
       .attr('class', 'fly-dot')
       .attr('r', radius)
-      .attr('fill', (popIdx) =>
-        numCatMode
-          ? groupBands[populationGroup[popIdx] ?? 0]?.color ?? '#2563eb'
-          : '#2563eb',
-      )
+      .attr('fill', SAMPLE_DOT_COLOR)
       .attr('fill-opacity', 0.9)
       .attr('cx', (popIdx) => {
         const localX = popX(population[popIdx]!)!
@@ -652,8 +703,8 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         .attr('cx', (_, j) => sampleX(sampleValues[j]!)!)
         .attr('cy', (_, j) => sampleY[j]!)
         .attr('r', radius)
-        .attr('fill', '#2563eb')
-        .attr('fill-opacity', 0.7)
+        .attr('fill', SAMPLE_DOT_COLOR)
+        .attr('fill-opacity', SAMPLE_DOT_OPACITY)
     }
   } else {
     drawSampleDots(
@@ -671,12 +722,17 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
 
   if (signal.aborted) return
 
-  await fadePreviousStatLines(sampleGroup, signal, timingMs)
+  await fadePreviousStatLines(sampleGroup, signal, timingMs, numCatMode)
   if (signal.aborted) return
 
   appendStats()
 
   if (!includeDist) {
+    await delay(timingMs * 0.2, signal)
+    return
+  }
+
+  if (!Number.isFinite(sampleStat)) {
     await delay(timingMs * 0.2, signal)
     return
   }
@@ -707,6 +763,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     paneInnerHeight,
     groupBands,
     statistic,
+    populationGrandStat,
   })
 }
 
@@ -736,6 +793,7 @@ export type DistAnimContext = {
   paneInnerHeight: number
   groupBands: GroupBand[]
   statistic: 'mean' | 'median'
+  populationGrandStat: number
 }
 
 export async function animateDistDrop(ctx: DistAnimContext): Promise<void> {
@@ -775,5 +833,7 @@ export function clearAllAnimationLayers(
     d3.select(sampleGroup).selectAll('.sample-stat-summary').remove()
   }
   d3.select(distGroup).selectAll('.dist-dot').remove()
-  d3.select(distGroup).selectAll('.dist-stat-arrow').remove()
+  removeDistTransientOverlays(distGroup)
+  d3.select(sampleGroup).selectAll('.sample-stat-triangle').remove()
+  d3.select(sampleGroup).selectAll('.sample-stat-label').remove()
 }

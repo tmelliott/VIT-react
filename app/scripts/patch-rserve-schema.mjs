@@ -47,4 +47,9 @@ if (!src.startsWith(marker)) {
   src = `${marker}\n${src}`
 }
 
+src = src.replace(
+  /export const vitAppSchema = \{\n  ping,\n  vitWidget,\n\} satisfies z\.ZodRawShape;/,
+  'export const vitAppSchema = {\n  ping: ping.optional(),\n  vitWidget,\n} satisfies z.ZodRawShape;',
+)
+
 writeFileSync(path, src)

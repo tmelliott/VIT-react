@@ -61,3 +61,12 @@ export function effectiveDistDomain(
   if (sampleStats.length > 0) return populationDomain(sampleStats)
   return [0, 1]
 }
+
+/** P3 axis for K≥3: same px/unit as pop/sample, domain shifted to start at 0. */
+export function distDomainAlignedToPop(
+  popDomain: [number, number],
+): [number, number] {
+  const span = popDomain[1] - popDomain[0]
+  if (!Number.isFinite(span) || span <= 0) return [0, 1]
+  return [0, span]
+}

@@ -101,8 +101,8 @@ export function ConfigPanel({
             disabled={computing}
             onChange={(e) => onStatisticChange(e.target.value)}
           >
-            <option value="mean">Mean</option>
-            <option value="median">Median</option>
+            <option value="mean">Mean (x̄)</option>
+            <option value="median">Median (x̃)</option>
           </select>
         </label>
 

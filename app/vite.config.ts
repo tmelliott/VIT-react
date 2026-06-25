@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const reactRserveLib = path.resolve(__dirname, '../../../react-rserve/lib/main.ts')
+const rserveTsLib = path.resolve(__dirname, '../../../rserve-ts/dist/index.mjs')
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -13,6 +14,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@tmelliott/react-rserve': reactRserveLib,
+      'rserve-ts': rserveTsLib,
     },
   },
 })

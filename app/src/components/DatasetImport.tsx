@@ -36,24 +36,22 @@ export function DatasetImport({
           spellCheck={false}
         />
       </label>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className="cursor-pointer rounded bg-blue-600 px-3 py-1.5 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={loading || urlInput.trim() === ''}
-          onClick={onLoad}
-        >
-          {loading ? 'Loading…' : 'Load dataset'}
-        </button>
-        <button
-          type="button"
-          className="cursor-pointer rounded border border-gray-300 bg-white px-3 py-1.5 text-gray-800 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={loading}
-          onClick={onUseExample}
-        >
-          Use example ({exampleLabel})
-        </button>
-      </div>
+      <button
+        type="button"
+        className="cursor-pointer rounded bg-blue-600 px-3 py-1.5 text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={loading || urlInput.trim() === ''}
+        onClick={onLoad}
+      >
+        {loading ? 'Loading…' : 'Load dataset'}
+      </button>
+      <button
+        type="button"
+        className="cursor-pointer self-start rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={loading}
+        onClick={onUseExample}
+      >
+        Use example ({exampleLabel})
+      </button>
       {nrows > 0 && (
         <p className="text-sm text-gray-600">
           {nrows} rows × {ncols} cols

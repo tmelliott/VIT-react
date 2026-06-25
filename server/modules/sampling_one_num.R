@@ -57,7 +57,7 @@ compute_one_num_sampling <- function(
     idx_offset <- 0L
 
     for (i in seq_len(num_reps)) {
-        idx <- sample.int(n_pop, sample_size, replace = TRUE)
+        idx <- sample.int(n_pop, sample_size, replace = FALSE)
         sample_vals <- population[idx]
         sample_stats[[i]] <- sample_statistic(sample_vals, statistic)
         if (i <= pool_reps) {

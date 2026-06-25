@@ -11,23 +11,34 @@ import { DOT_RADIUS, heapYValues } from '../d3/heapLayout'
 import { drawHorizontalBoxplot } from '../d3/boxplot'
 import { drawBottomAxis } from '../d3/drawPaneAxis'
 import {
+  appendStatMarker,
+  removeStatMarkers,
+} from '../d3/statMarker'
+import {
   computeGroupBands,
   groupStatsFromPopulation,
   heapYByGroup,
   populationGrandStat,
+  twoGroupDiffZone,
   type GroupBand,
 } from '../d3/groupLayout'
 import {
-  appendPopulationDeviationArrows,
-  appendPopulationDifferenceArrow,
+  appendPopulationDeviationMarkers,
+  appendAverageDeviationLabel,
+  appendTwoGroupPopulationDiffDisplay,
 } from '../d3/sampleStatSummary'
+import { drawReferenceStatLine, removeReferenceStatLine } from '../d3/referenceLine'
 import type { PaneLayout } from '../d3/paneCoords'
 import { domainsFromState, usePaneLayout, useSamplingScales } from '../hooks/useSamplingScales'
 import {
   effectiveDistDomain,
+  distDomainAlignedToPop,
   effectivePopDomain,
   type VariableSupport,
 } from '../variableSupport'
+import { PaneHelpModal } from '../PaneHelpModal'
+import { paneHelpContent } from '../paneHelpContent'
+import type { StatKind } from '../types'
 
 export type ThreePaneHandle = {
   popGroup: SVGGElement
@@ -41,6 +52,8 @@ export type ThreePaneHandle = {
   popY: number[]
   paneInnerHeight: number
   dotAreaHeight: number
+  statZoneTop: number
+  statZoneHeight: number
   boxTop: number
   boxAreaHeight: number
   baselineY: number
@@ -68,6 +81,7 @@ type ThreePaneDisplayProps = {
   showFullPopulation: boolean
   moduleReady: boolean
   variableSupport: VariableSupport
+  sampleSize: number
   scales: {
     pop?: Float64Array | number[]
     sample?: Float64Array | number[]
@@ -127,6 +141,18 @@ function drawGroupBandGuides(
   }
 }
 
+function removeGroupedPopulationOverlays(g: SVGGElement) {
+  const sel = d3.select(g)
+  sel.selectAll('.pop-grand-mean').remove()
+  sel.selectAll('.pop-dev-arrow').remove()
+  sel.selectAll('.pop-diff-arrow').remove()
+  sel.selectAll('.pop-stat-drop-line').remove()
+  sel.selectAll('.pop-diff-label').remove()
+  sel.selectAll('.pop-avg-dev-label').remove()
+  sel.selectAll('.pop-stat-vline').remove()
+  sel.selectAll('.pop-band-line, .pop-band-label').remove()
+}
+
 function drawPopulationGrouped(
   g: SVGGElement,
   population: number[],
@@ -135,6 +161,8 @@ function drawPopulationGrouped(
   groupStats: number[],
   grandMean: number,
   statKind: string,
+  statistic: 'mean' | 'median',
+  nGroups: number,
   popX: d3.ScaleLinear<number, number>,
   popY: number[],
   showStats: boolean,
@@ -144,11 +172,9 @@ function drawPopulationGrouped(
 ) {
   const sel = d3.select(g)
   sel.selectAll('.pop-dot').remove()
-  sel.selectAll('.pop-stat-line').remove()
-  sel.selectAll('.pop-grand-mean').remove()
+  removeStatMarkers(g)
+  removeGroupedPopulationOverlays(g)
   sel.selectAll('[class^="pop-boxplot"]').remove()
-  sel.selectAll('.pop-dev-arrow').remove()
-  sel.selectAll('.pop-diff-arrow').remove()
 
   sel
     .selectAll<SVGCircleElement, number>('.pop-dot')
@@ -159,44 +185,50 @@ function drawPopulationGrouped(
     .attr('cy', (_, i) => popY[i] ?? bands[0]?.baselineY ?? 0)
     .attr('r', DOT_RADIUS)
     .attr('fill', (_, i) => bands[populationGroup[i] ?? 0]?.color ?? '#64748b')
-    .attr('fill-opacity', 0.65)
+    .attr('fill-opacity', nGroups > 2 ? 0.32 : 0.65)
 
   if (showStats) {
-    for (const band of bands) {
-      const stat = groupStats[band.index]
-      if (stat == null || !Number.isFinite(stat)) continue
-      sel
-        .append('line')
-        .attr('class', 'pop-stat-line')
-        .attr('data-group', band.index)
-        .attr('x1', popX(stat)!)
-        .attr('x2', popX(stat)!)
-        .attr('y1', band.top + 4)
-        .attr('y2', band.top + band.dotAreaHeight)
-        .attr('stroke', band.color)
-        .attr('stroke-width', 2.5)
-    }
+    const multiGroupDev = nGroups >= 3 && Number.isFinite(grandMean)
 
-    if (statKind === 'average_deviation' && Number.isFinite(grandMean)) {
+    if (multiGroupDev) {
+      const labelZone = twoGroupDiffZone(innerHeight)
       sel
         .append('line')
         .attr('class', 'pop-grand-mean')
         .attr('x1', popX(grandMean)!)
         .attr('x2', popX(grandMean)!)
         .attr('y1', 0)
-        .attr('y2', bands[bands.length - 1]!.top + bands[bands.length - 1]!.height)
+        .attr('y2', labelZone.top)
         .attr('stroke', '#111827')
         .attr('stroke-width', 1.5)
         .attr('stroke-dasharray', '5,3')
 
-      appendPopulationDeviationArrows(g, popX, groupStats, grandMean, bands)
-    }
+      appendPopulationDeviationMarkers(g, popX, groupStats, grandMean, bands)
+      appendAverageDeviationLabel(g, innerWidth, labelZone, groupStats, grandMean)
+    } else {
+      for (const band of bands) {
+        const stat = groupStats[band.index]
+        if (stat == null || !Number.isFinite(stat)) continue
+        appendStatMarker(g, popX(stat)!, band.statZoneTop, stat, {
+          color: band.color,
+          showLabel: false,
+        })
+      }
 
-    if (
-      (statKind === 'difference' || groupStats.length === 2) &&
-      groupStats.length >= 2
-    ) {
-      appendPopulationDifferenceArrow(g, popX, groupStats, innerHeight)
+      if (
+        nGroups === 2 &&
+        (statKind === 'difference' || groupStats.length === 2) &&
+        groupStats.length >= 2
+      ) {
+        appendTwoGroupPopulationDiffDisplay(
+          g,
+          popX,
+          groupStats,
+          bands,
+          twoGroupDiffZone(innerHeight),
+          statistic,
+        )
+      }
     }
   }
 
@@ -225,11 +257,13 @@ function drawPopulationOneNum(
   showBoxplot: boolean,
   popX: d3.ScaleLinear<number, number>,
   popY: number[],
-  dotAreaHeight: number,
+  statZoneTop: number,
   boxTop: number,
   boxAreaHeight: number,
   baselineY: number,
+  stat: 'mean' | 'median',
 ) {
+  removeGroupedPopulationOverlays(g)
   const sel = d3
     .select(g)
     .selectAll<SVGCircleElement, number>('.pop-dot')
@@ -244,18 +278,13 @@ function drawPopulationOneNum(
     .attr('fill', '#64748b')
     .attr('fill-opacity', 0.55)
 
-  d3.select(g).selectAll('.pop-stat-line').remove()
+  removeStatMarkers(g)
   d3.select(g).selectAll('[class^="pop-boxplot"]').remove()
   if (showPopulationStat && populationStat != null && Number.isFinite(populationStat)) {
-    d3.select(g)
-      .append('line')
-      .attr('class', 'pop-stat-line')
-      .attr('x1', popX(populationStat)!)
-      .attr('x2', popX(populationStat)!)
-      .attr('y1', 4)
-      .attr('y2', dotAreaHeight)
-      .attr('stroke', '#7c3aed')
-      .attr('stroke-width', 2.5)
+    appendStatMarker(g, popX(populationStat)!, statZoneTop, populationStat, {
+      showLabel: true,
+      statistic: stat,
+    })
   }
 
   if (showBoxplot) {
@@ -285,6 +314,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       showFullPopulation,
       moduleReady,
       variableSupport,
+      sampleSize,
       scales,
     },
     ref,
@@ -303,7 +333,12 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     const showData =
       variableSupport === 'one_num' || variableSupport === 'num_cat'
     const popDomain = effectivePopDomain(population, scales?.pop)
-    const distDomain = effectiveDistDomain([], scales?.dist)
+    const rawDistDomain = effectiveDistDomain([], scales?.dist)
+    const popAlignedDist =
+      numCatMode && statKind === 'average_deviation' && nGroups >= 3
+    const distDomain = popAlignedDist
+      ? distDomainAlignedToPop(popDomain)
+      : rawDistDomain
 
     useEffect(() => {
       const el = containerRef.current
@@ -323,15 +358,22 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       plotTop,
       margin,
       dotAreaHeight,
+      statZoneTop,
+      statZoneHeight,
       boxTop,
       boxAreaHeight,
       baselineY,
       distBaselineY,
-    } = usePaneLayout(size.width, size.height)
+    } = usePaneLayout(size.width, size.height, !numCatMode)
     const domains = domainsFromState(scales)
+    const activeDistDomain = popAlignedDist
+      ? distDomainAlignedToPop(popDomain)
+      : moduleReady
+        ? domains.dist
+        : distDomain
     const { popX, sampleX, distX } = useSamplingScales(
       popDomain,
-      moduleReady ? domains.dist : distDomain,
+      activeDistDomain,
       innerWidth,
       innerHeight,
     )
@@ -384,6 +426,8 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
         popY,
         paneInnerHeight: innerHeight,
         dotAreaHeight,
+        statZoneTop,
+        statZoneHeight,
         boxTop,
         boxAreaHeight,
         baselineY,
@@ -404,6 +448,8 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
         popY,
         innerHeight,
         dotAreaHeight,
+        statZoneTop,
+        statZoneHeight,
         boxTop,
         boxAreaHeight,
         baselineY,
@@ -423,8 +469,6 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       const g = popGroupRef.current
       if (!g) return
 
-      d3.select(g).selectAll('.pop-band-line, .pop-band-label').remove()
-
       if (!showData || population.length === 0 || innerWidth <= 0) {
         d3.select(g).selectAll('*').remove()
         return
@@ -439,6 +483,8 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
           resolvedGroupStats,
           grandMean,
           statKind,
+          stat,
+          nGroups,
           popX,
           popY,
           showPopulationStat,
@@ -455,10 +501,11 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
           showFullPopulation,
           popX,
           popY,
-          dotAreaHeight,
+          statZoneTop,
           boxTop,
           boxAreaHeight,
           baselineY,
+          stat,
         )
       }
     }, [
@@ -469,9 +516,12 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       resolvedGroupStats,
       grandMean,
       statKind,
+      stat,
+      nGroups,
       numCatMode,
       popX,
       popY,
+      statZoneTop,
       dotAreaHeight,
       boxTop,
       boxAreaHeight,
@@ -479,6 +529,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       showPopulationStat,
       showFullPopulation,
       populationStat,
+      stat,
       innerWidth,
       innerHeight,
     ])
@@ -490,41 +541,58 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       if (moduleReady) return
       d3.select(sampleG).selectAll('*').remove()
       d3.select(distG).selectAll('*').remove()
-    }, [moduleReady])
+    }, [moduleReady, numCatMode, groupBands, innerWidth])
 
     useEffect(() => {
       const g = distGroupRef.current
       if (!g) return
+      removeReferenceStatLine(g)
       d3.select(g).selectAll('.dist-pop-stat-line').remove()
       if (
-        showPopulationStat &&
-        populationStat != null &&
-        Number.isFinite(populationStat) &&
-        numCatMode
+        !moduleReady ||
+        !showPopulationStat ||
+        populationStat == null ||
+        !Number.isFinite(populationStat)
       ) {
-        d3.select(g)
-          .append('line')
-          .attr('class', 'dist-pop-stat-line')
-          .attr('x1', distX(populationStat)!)
-          .attr('x2', distX(populationStat)!)
-          .attr('y1', 4)
-          .attr('y2', innerHeight - 4)
-          .attr('stroke', '#7c3aed')
-          .attr('stroke-width', 2.5)
+        return
       }
+      drawReferenceStatLine(g, distX, populationStat, innerHeight)
     }, [
+      moduleReady,
       showPopulationStat,
       populationStat,
-      numCatMode,
       distX,
       innerHeight,
     ])
 
     useEffect(() => {
       const g = sampleGroupRef.current
-      if (!g || !numCatMode) return
+      if (!g) return
+      removeReferenceStatLine(g)
+      if (
+        !moduleReady ||
+        numCatMode ||
+        !showPopulationStat ||
+        populationStat == null ||
+        !Number.isFinite(populationStat)
+      ) {
+        return
+      }
+      drawReferenceStatLine(g, sampleX, populationStat, innerHeight)
+    }, [
+      moduleReady,
+      numCatMode,
+      showPopulationStat,
+      populationStat,
+      sampleX,
+      innerHeight,
+    ])
+
+    useEffect(() => {
+      const g = sampleGroupRef.current
+      if (!g || !numCatMode || !moduleReady) return
       drawGroupBandGuides(g, groupBands, innerWidth, 'sample')
-    }, [numCatMode, groupBands, innerWidth])
+    }, [numCatMode, groupBands, innerWidth, moduleReady])
 
     useEffect(() => {
       const axes = axisRefs.current
@@ -533,8 +601,32 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       if (axes[2]) drawBottomAxis(axes[2], distX, innerWidth)
     }, [popX, sampleX, distX, innerWidth])
 
+    const helpStatKind = (statKind || '') as StatKind
+
     return (
-      <div ref={containerRef} className="h-full w-full rounded border border-gray-300 bg-white">
+      <div ref={containerRef} className="relative h-full w-full rounded border border-gray-300 bg-white">
+        {PANE_LABELS.map((label, paneIndex) => {
+          const help = paneHelpContent({
+            paneIndex: paneIndex as 0 | 1 | 2,
+            variableSupport,
+            statistic: stat,
+            nGroups,
+            statKind: helpStatKind,
+            sampleSize,
+          })
+          return (
+            <PaneHelpModal
+              key={`help-${label}`}
+              paneLabel={label}
+              summary={help.summary}
+              details={help.details}
+              style={{
+                top: paneIndex * paneHeight + 6,
+                right: margin.right,
+              }}
+            />
+          )
+        })}
         <svg width={size.width} height={size.height} className="block overflow-hidden">
           {PANE_LABELS.map((label, paneIndex) => {
             const yOffset = paneIndex * paneHeight

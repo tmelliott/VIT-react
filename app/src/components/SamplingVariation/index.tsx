@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentRef } from 'react'
+import { useRef, useState, useMemo, type ComponentRef } from 'react'
 import { useWidget } from '@tmelliott/react-rserve'
 import type {
   SamplingVariationCtor,
@@ -22,6 +22,10 @@ import {
 import {
   getVariableSupport,
 } from './variableSupport'
+import {
+  averageDeviationFromGroups,
+  populationGrandStat,
+} from './d3/groupLayout'
 
 function useInferenceActive(moduleStatus: string, configEpoch: number) {
   const confirmedEpochRef = useRef<number | null>(null)
@@ -89,6 +93,36 @@ function SamplingVariationView({
     groupVariables,
   )
   const numCatMode = variableSupport === 'num_cat' && isNumCatMode(nGroups, yvar)
+  const stat = statistic === 'median' ? 'median' : 'mean'
+  const showPopulationPreview =
+    (variableSupport === 'one_num' || variableSupport === 'num_cat') &&
+    population.length > 0
+  const displayPopulationStat = useMemo(() => {
+    if (variableSupport === 'one_num' && population.length > 0) {
+      return populationGrandStat(population, stat)
+    }
+    if (
+      numCatMode &&
+      statKind === 'average_deviation' &&
+      nGroups >= 3 &&
+      groupStats.length >= nGroups
+    ) {
+      return averageDeviationFromGroups(
+        groupStats.slice(0, nGroups),
+        populationGrandStat(population, stat),
+      )
+    }
+    return state.population_stat
+  }, [
+    variableSupport,
+    population,
+    stat,
+    numCatMode,
+    statKind,
+    nGroups,
+    groupStats,
+    state.population_stat,
+  ])
   const maxSampleSize =
     dataset.dsInfo.nrows > 0
       ? dataset.dsInfo.nrows
@@ -185,11 +219,12 @@ function SamplingVariationView({
           nGroups={nGroups}
           statKind={statKind}
           statistic={statistic}
-          populationStat={state.population_stat}
-          showPopulationStat={inferenceActive}
-          showFullPopulation={inferenceActive}
+          populationStat={displayPopulationStat}
+          showPopulationStat={showPopulationPreview}
+          showFullPopulation={showPopulationPreview}
           moduleReady={inferenceActive}
           variableSupport={variableSupport}
+          sampleSize={sampleSize}
           scales={state.scales}
         />
       </main>

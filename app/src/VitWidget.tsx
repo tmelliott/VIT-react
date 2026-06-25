@@ -1,38 +1,77 @@
+import { useEffect, useRef, useState } from 'react'
 import { useRserve } from '@tmelliott/react-rserve'
 import vitAppSchema from './rserve/vit.rserve'
 import type { VitAppShape } from './rserve/vit.types'
 import { VitAppProvider } from './context/VitAppProvider'
+import { RserveConnectionProvider } from './context/RserveConnectionProvider'
 import { AppRouter } from './AppRouter'
+import { RserveStatusBar } from './components/RserveStatusBar'
+import { RserveDisconnectOverlay } from './components/RserveDisconnectOverlay'
 
 export function VitWidget() {
   const rserveHost =
     import.meta.env.VITE_RSERVE_HOST ?? 'http://127.0.0.1:6311'
 
-  const { app, loading, error } = useRserve(vitAppSchema, {
+  const {
+    app,
+    connectionStatus,
+    everConnected,
+    reconnectAttempt,
+    error,
+  } = useRserve(vitAppSchema, {
     host: rserveHost,
   })
 
-  if (loading) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-8 text-gray-600">
-        Connecting to Rserve…
-      </div>
-    )
-  }
+  const shouldReloadAfterReconnect = useRef(false)
+  const [pendingReload, setPendingReload] = useState(false)
 
-  if (error) {
-    return (
-      <p className="p-4" role="alert">
-        Rserve: {error} (is <code>Rscript server/main.R</code> running?)
-      </p>
-    )
-  }
+  useEffect(() => {
+    if (everConnected && connectionStatus === 'disconnected') {
+      shouldReloadAfterReconnect.current = true
+      setPendingReload(true)
+    }
+    if (
+      shouldReloadAfterReconnect.current &&
+      connectionStatus === 'connected'
+    ) {
+      window.location.reload()
+    }
+  }, [connectionStatus, everConnected])
 
-  if (!app) return null
+  const isReady = connectionStatus === 'connected' && !!app
+  const showOverlay =
+    pendingReload || (everConnected && connectionStatus !== 'connected')
 
-  return (
+  const appShell = app ? (
     <VitAppProvider app={app as VitAppShape}>
       <AppRouter />
     </VitAppProvider>
+  ) : (
+    <AppRouter />
+  )
+
+  return (
+    <RserveConnectionProvider
+      host={rserveHost}
+      connectionStatus={connectionStatus}
+      isReady={isReady}
+      error={error}
+    >
+      <div className="flex h-full min-h-0 flex-col">
+        <div
+          className="relative flex min-h-0 flex-1 flex-col"
+          {...(showOverlay ? { inert: true } : {})}
+        >
+          {appShell}
+        </div>
+        {showOverlay ? <RserveDisconnectOverlay /> : null}
+        <RserveStatusBar
+          status={connectionStatus}
+          host={rserveHost}
+          error={error}
+          reconnectAttempt={reconnectAttempt}
+        />
+      </div>
+    </RserveConnectionProvider>
   )
 }

@@ -1,5 +1,6 @@
 import type { ScaleLinear } from 'd3'
 import * as d3 from 'd3'
+import { DIST_DOT_COLOR, DIST_DOT_OPACITY } from './paneStyle'
 
 export type DistDotPosition = { x: number; y: number }
 export type DistLayout = Map<number, DistDotPosition>
@@ -46,7 +47,9 @@ export function precomputeDistLayout(
 
   for (let i = 0; i < stats.length; i++) {
     const stat = stats[i]!
-    const x = distX(stat)!
+    if (!Number.isFinite(stat)) continue
+    const x = distX(stat)
+    if (x == null || !Number.isFinite(x)) continue
     const binIdx = Math.max(
       0,
       Math.min(nBins - 1, Math.floor((x - rangeMin) / dotSize)),
@@ -69,10 +72,13 @@ export function distTarget(
   distX: ScaleLinear<number, number>,
   sampleStat: number,
   distBaselineY: number,
-): DistDotPosition {
+): DistDotPosition | null {
+  if (!Number.isFinite(sampleStat)) return null
   const cached = layout.get(replicateIndex)
   if (cached) return cached
-  return { x: distX(sampleStat)!, y: distBaselineY }
+  const x = distX(sampleStat)
+  if (x == null || !Number.isFinite(x)) return null
+  return { x, y: distBaselineY }
 }
 
 export function appendDistDotElement(
@@ -83,6 +89,9 @@ export function appendDistDotElement(
   y: number,
   dotRadius: number,
 ): void {
+  if (!Number.isFinite(sampleStat) || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return
+  }
   const existing = d3
     .select(distGroup)
     .select<SVGCircleElement>(`.dist-dot[data-index="${replicateIndex}"]`)
@@ -99,8 +108,8 @@ export function appendDistDotElement(
     .attr('cx', x)
     .attr('cy', y)
     .attr('r', dotRadius - 1)
-    .attr('fill', '#dc2626')
-    .attr('fill-opacity', 0.85)
+    .attr('fill', DIST_DOT_COLOR)
+    .attr('fill-opacity', DIST_DOT_OPACITY)
 }
 
 /** Sort reps so lower (axis-near) dots are placed before higher ones in a batch. */

@@ -321,11 +321,14 @@ export const vitWidget = Robj.ocap(
     methods: Robj.list({ load_dataset: Robj.ocap([z.string()], Robj.null()) }),
   }),
 );
+export const ping = Robj.ocap([], Robj.null());
 
 export type TSamplingVariation = z.infer<typeof samplingVariation>;
 export type TVitWidget = z.infer<typeof vitWidget>;
+export type TPing = z.infer<typeof ping>;
 
 export const vitAppSchema = {
+  ping,
   vitWidget,
 } satisfies z.ZodRawShape;
 

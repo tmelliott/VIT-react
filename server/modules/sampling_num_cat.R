@@ -65,17 +65,27 @@ population_summary_stat <- function(x, y, levels, statistic, n_groups) {
     }
 }
 
-sample_replicate_stat <- function(x, y, levels, statistic, n_groups) {
+sample_replicate_stat <- function(
+    x,
+    y,
+    levels,
+    statistic,
+    n_groups,
+    population_grand = NULL) {
     if (n_groups == 2L) {
         gstats <- group_stats_for_levels(x, y, levels, statistic)
         gstats[[2L]] - gstats[[1L]]
     } else {
-        gstat <- sample_statistic(x, statistic)
+        ref_stat <- if (!is.null(population_grand)) {
+            population_grand
+        } else {
+            sample_statistic(x, statistic)
+        }
         devs <- vapply(levels, function(g) {
             if (!any(y == g)) {
                 return(NA_real_)
             }
-            abs(sample_statistic(x[y == g], statistic) - gstat)
+            abs(sample_statistic(x[y == g], statistic) - ref_stat)
         }, numeric(1))
         if (any(is.na(devs))) {
             return(NA_real_)
@@ -87,6 +97,10 @@ sample_replicate_stat <- function(x, y, levels, statistic, n_groups) {
 sample_has_multiple_groups <- function(y, levels) {
     present <- levels[vapply(levels, function(g) any(y == g), logical(1))]
     length(present) >= 2L
+}
+
+sample_has_all_groups <- function(y, levels) {
+    all(vapply(levels, function(g) any(y == g), logical(1)))
 }
 
 compute_num_cat_sampling <- function(
@@ -125,6 +139,7 @@ compute_num_cat_sampling <- function(
     stat_kind <- if (n_groups == 2L) "difference" else "average_deviation"
 
     pop_domain <- scale_domain(x)
+    population_grand <- sample_statistic(x, statistic)
     sample_stats <- numeric(num_reps)
     pool_reps <- min(num_reps, ANIM_POOL_SIZE)
     sample_indices <- integer(pool_reps * sample_size)
@@ -132,9 +147,13 @@ compute_num_cat_sampling <- function(
 
     for (i in seq_len(num_reps)) {
         repeat {
-            idx <- sample.int(n_pop, sample_size, replace = TRUE)
+            idx <- sample.int(n_pop, sample_size, replace = FALSE)
             sy <- y[idx]
-            if (sample_has_multiple_groups(sy, levels)) {
+            ok <- sample_has_multiple_groups(sy, levels)
+            if (n_groups >= 3L) {
+                ok <- ok && sample_has_all_groups(sy, levels)
+            }
+            if (ok) {
                 break
             }
         }
@@ -144,7 +163,8 @@ compute_num_cat_sampling <- function(
             sy,
             levels,
             statistic,
-            n_groups
+            n_groups,
+            population_grand = population_grand
         )
         if (i <= pool_reps) {
             sample_indices[(idx_offset + 1L):(idx_offset + sample_size)] <- idx - 1L
@@ -156,10 +176,19 @@ compute_num_cat_sampling <- function(
         }
     }
 
-    dist_domain <- scale_domain(sample_stats)
+    dist_domain <- scale_domain(sample_stats[is.finite(sample_stats)])
+    if (length(dist_domain) != 2L) {
+        dist_domain <- c(0, 1)
+    }
     if (n_groups == 2L) {
         span <- max(abs(dist_domain))
         dist_domain <- c(-span, span)
+    } else if (n_groups >= 3L) {
+        pop_span <- diff(pop_domain)
+        if (!is.finite(pop_span) || pop_span <= 0) {
+            pop_span <- max(dist_domain[2L], 1)
+        }
+        dist_domain <- c(0, pop_span)
     }
 
     list(

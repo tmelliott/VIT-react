@@ -1,6 +1,7 @@
 import * as d3 from 'd3'
 import { BOX_AREA_FRACTION, paneRegions } from '../hooks/useSamplingScales'
 import { DOT_RADIUS, heapYFromXPositions, plotRangeMin } from './heapLayout'
+import { TWO_GROUP_DIFF_ZONE_HEIGHT } from './statMarker'
 
 export const GROUP_COLORS = [
   '#2563eb',
@@ -13,6 +14,8 @@ export const GROUP_COLORS = [
   '#65a30d',
 ]
 
+export { BOX_AREA_FRACTION, TWO_GROUP_DIFF_ZONE_HEIGHT }
+
 export type GroupBand = {
   index: number
   label: string
@@ -20,6 +23,8 @@ export type GroupBand = {
   height: number
   dotAreaHeight: number
   baselineY: number
+  statZoneTop: number
+  statZoneHeight: number
   boxTop: number
   boxAreaHeight: number
   color: string
@@ -35,10 +40,12 @@ export function computeGroupBands(
   radius = DOT_RADIUS,
 ): GroupBand[] {
   const n = Math.max(1, groupLevels.length)
-  const bandHeight = innerHeight / n
+  const bottomReserve = n >= 2 ? TWO_GROUP_DIFF_ZONE_HEIGHT : 0
+  const bandsHeight = innerHeight - bottomReserve
+  const bandHeight = bandsHeight / n
   return groupLevels.map((label, index) => {
     const top = index * bandHeight
-    const regions = paneRegions(bandHeight, radius)
+    const regions = paneRegions(bandHeight, radius, { showStatLabel: false })
     return {
       index,
       label,
@@ -46,11 +53,29 @@ export function computeGroupBands(
       height: bandHeight,
       dotAreaHeight: regions.dotAreaHeight,
       baselineY: top + regions.baselineY,
+      statZoneTop: top + regions.statZoneTop,
+      statZoneHeight: regions.statZoneHeight,
       boxTop: top + regions.boxTop,
       boxAreaHeight: regions.boxAreaHeight,
       color: groupColor(index),
     }
   })
+}
+
+export type TwoGroupDiffZone = {
+  top: number
+  arrowY: number
+  labelY: number
+}
+
+export function twoGroupDiffZone(innerHeight: number): TwoGroupDiffZone {
+  const top = innerHeight - TWO_GROUP_DIFF_ZONE_HEIGHT
+  const arrowY = top + 10
+  return {
+    top,
+    arrowY,
+    labelY: arrowY + 14,
+  }
 }
 
 export function populationGrandStat(
@@ -60,6 +85,28 @@ export function populationGrandStat(
   if (population.length === 0) return 0
   if (statistic === 'median') return d3.median(population) ?? 0
   return d3.mean(population) ?? 0
+}
+
+/** Mean absolute deviation; NaN if any group stat is missing (matches R). */
+export function sampleAverageDeviation(
+  groupStats: number[],
+  grandStat: number,
+): number {
+  if (!Number.isFinite(grandStat)) return NaN
+  if (groupStats.some((s) => !Number.isFinite(s))) return NaN
+  return averageDeviationFromGroups(groupStats, grandStat)
+}
+
+/** Mean absolute deviation of group stats from the overall population statistic. */
+export function averageDeviationFromGroups(
+  groupStats: number[],
+  grandStat: number,
+): number {
+  const devs = groupStats
+    .filter((s) => Number.isFinite(s))
+    .map((s) => Math.abs(s - grandStat))
+  if (devs.length === 0) return NaN
+  return d3.mean(devs) ?? NaN
 }
 
 export function groupStatsFromPopulation(
@@ -153,5 +200,3 @@ export function heapYForSampleInBand(
     plotRangeMin(xScale),
   )
 }
-
-export { BOX_AREA_FRACTION }

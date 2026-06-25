@@ -123,6 +123,7 @@ export function useAnimationController(
           dotRadius: handle.dotRadius,
           boxTop: handle.boxTop,
           boxAreaHeight: handle.boxAreaHeight,
+          statZoneTop: handle.statZoneTop,
           signal,
           timingMs,
           fullAnimation,
@@ -135,6 +136,7 @@ export function useAnimationController(
           statistic: handle.statistic,
           statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
           paneInnerHeight: handle.paneInnerHeight,
+          populationGrandStat: handle.grandMean,
         })
       }
 
@@ -167,6 +169,7 @@ export function useAnimationController(
             dotRadius: handle.dotRadius,
             boxTop: handle.boxTop,
             boxAreaHeight: handle.boxAreaHeight,
+            statZoneTop: handle.statZoneTop,
             signal,
             timingMs,
             includeDist,
@@ -177,6 +180,7 @@ export function useAnimationController(
             statistic: handle.statistic,
             statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
             paneInnerHeight: handle.paneInnerHeight,
+            populationGrandStat: handle.grandMean,
           })
           r = batchEnd
         }
