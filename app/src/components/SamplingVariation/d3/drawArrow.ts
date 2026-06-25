@@ -197,6 +197,17 @@ export function transitionHorizontalLinesByDy(
   return Promise.all(transitions).then(() => undefined)
 }
 
+/** Ensure x1 <= x2 so horizontal lines read left-to-right. */
+export function normalizeHorizontalLineLeftToRight(
+  line: d3.Selection<SVGLineElement, unknown, null, undefined>,
+): void {
+  if (line.empty()) return
+  const x1 = Number(line.attr('x1'))
+  const x2 = Number(line.attr('x2'))
+  if (!Number.isFinite(x1) || !Number.isFinite(x2) || x1 <= x2) return
+  line.attr('x1', x2).attr('x2', x1)
+}
+
 /** Animate horizontal line to new x endpoints and y (reads current attrs as start). */
 export function transitionHorizontalLineTo(
   line: d3.Selection<SVGLineElement, unknown, null, undefined>,
@@ -229,15 +240,12 @@ export function transitionHorizontalLinesTo(
   duration: number,
 ): Promise<void> {
   if (lines.empty()) return Promise.resolve()
-  const transitions = lines.nodes().map((node) =>
-    transitionHorizontalLineTo(
-      d3.select(node),
-      endForLine(node).x1,
-      endForLine(node).x2,
-      endForLine(node).y,
-      duration,
-    ),
-  )
+  const transitions = lines.nodes().map((node) => {
+    const sel = d3.select<SVGLineElement, unknown>(node)
+    normalizeHorizontalLineLeftToRight(sel)
+    const end = endForLine(node)
+    return transitionHorizontalLineTo(sel, end.x1, end.x2, end.y, duration)
+  })
   return Promise.all(transitions).then(() => undefined)
 }
 

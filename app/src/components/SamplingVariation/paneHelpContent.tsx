@@ -174,10 +174,9 @@ function p2Content(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNo
       </p>
       {ctx.variableSupport === 'num_cat' && ctx.nGroups >= 3 && (
         <p>
-          For multiple groups, sample group {ctx.statistic}s are compared to the{' '}
-          <strong>{grandStatLabel(ctx.statistic)}</strong> from P1 (fixed centre), not the
-          sample&apos;s own overall {ctx.statistic}. If a group is missing from the sample,
-          it is omitted from the average deviation (divided by the number of groups present).
+          For multiple groups, sample group {ctx.statistic}s are compared to the sample&apos;s
+          own overall {ctx.statistic} (dashed vertical line). The average deviation summary
+          uses only groups present in the sample.
         </p>
       )}
       {ctx.variableSupport === 'num_cat' && ctx.nGroups === 2 && (
@@ -193,8 +192,8 @@ function p2Content(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNo
         </p>
       )}
       <p>
-        Earlier samples leave faint stat lines so you can see how estimates change from draw to
-        draw.
+        Each replicate shows a fresh sample display; only the current draw&apos;s dots and
+        statistics are visible in this pane.
       </p>
     </>
   )
@@ -279,18 +278,17 @@ function p3MultiGroup(ctx: PaneHelpContext): { summary: ReactNode; details: Reac
     ),
     details: (
       <>
-        <p>For each replicate, with population centre {sym} (fixed from P1):</p>
+        <p>For each replicate, with sample centre {sym} (overall sample {ctx.statistic}):</p>
         <p className="font-mono text-[0.95em]">
           D* = (1/<em>K</em>) Σ<sub>k=1</sub>
           <sup>K</sup> |{sym}
-          <sub>k</sub>* − {sym}|
+          <sub>k</sub>* − {sym}*|
         </p>
         <p>
           where {sym}
-          <sub>k</sub>* is the sample {ctx.statistic} in group <em>k</em>. Because sample group
-          stats are noisy, <em>D</em>* often varies <strong>above</strong> as well as below{' '}
-          <em>D</em>; the peak may sit slightly to the right of the reference line, especially
-          when the sample size is small relative to the number of groups.
+          <sub>k</sub>* is the sample {ctx.statistic} in group <em>k</em> and {sym}* is the
+          sample&apos;s overall {ctx.statistic}. The gray reference line marks the population
+          value <em>D</em> from P1.
         </p>
         <p>
           This pane combines all 1000 replicate statistics into one picture of sampling

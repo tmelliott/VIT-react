@@ -20,8 +20,7 @@ import {
   animateSampleDeviationSummary,
   animateTwoGroupSampleDiffSummary,
   appendTwoGroupBandSampleStat,
-  clearSampleDiffSummaries,
-  removeSampleStatSummaries,
+  sampleGrandStat,
   type StatKind,
 } from './sampleStatSummary'
 import { appendStatMarker } from './statMarker'
@@ -44,6 +43,21 @@ const INSTANT_TWO_GROUP_SUMMARY_TIMING = {
   SampleAnimationTiming,
   'twoGroupDropLineMs' | 'twoGroupPreArrowPauseMs' | 'twoGroupArrowMs'
 >
+
+function avgDevCenterStat(
+  numCatMode: boolean,
+  statKind: StatKind,
+  nGroups: number,
+  sampleIndices: number[],
+  population: number[],
+  statistic: 'mean' | 'median',
+  populationGrandStat: number,
+): number {
+  if (numCatMode && statKind === 'average_deviation' && nGroups >= 3) {
+    return sampleGrandStat(sampleIndices, population, statistic)
+  }
+  return populationGrandStat
+}
 
 export type AnimSignal = {
   aborted: boolean
@@ -216,98 +230,6 @@ async function highlightSamplePointsOneByOne(
       i < POINT_HIGHLIGHT_SLOW_COUNT ? pointHighlightMs : pointHighlightFastMs
     await delay(ms, signal)
   }
-}
-
-async function promoteOneNumStatsToHistory(
-  sampleGroup: SVGGElement,
-  signal: AnimSignal,
-  timingMs: number,
-): Promise<void> {
-  d3.select(sampleGroup).selectAll('.sample-stat-triangle, .sample-stat-label').remove()
-  d3.select(sampleGroup).selectAll('.sample-stat-line').remove()
-
-  const blueVlines = d3
-    .select(sampleGroup)
-    .selectAll<SVGLineElement, unknown>('.sample-stat-barcode-vline')
-  if (blueVlines.empty()) return
-
-  const duration = timingMs > 0 ? Math.min(300, timingMs * 0.3) : 0
-  if (duration <= 0 || signal.aborted) {
-    blueVlines.attr('opacity', PREVIOUS_STAT_OPACITY)
-    return
-  }
-
-  await new Promise<void>((resolve) => {
-    blueVlines
-      .transition()
-      .duration(duration)
-      .attr('opacity', PREVIOUS_STAT_OPACITY)
-      .on('end', () => resolve())
-  })
-}
-
-async function promoteTwoGroupStatsToHistory(
-  sampleGroup: SVGGElement,
-  signal: AnimSignal,
-  timingMs: number,
-): Promise<void> {
-  d3.select(sampleGroup).selectAll('.sample-stat-triangle, .sample-stat-label').remove()
-
-  const existing = d3
-    .select(sampleGroup)
-    .selectAll<SVGLineElement, unknown>('.sample-stat-line')
-  if (existing.empty()) return
-
-  const duration = timingMs > 0 ? Math.min(300, timingMs * 0.3) : 0
-  if (duration <= 0 || signal.aborted) {
-    existing.attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-    return
-  }
-
-  await new Promise<void>((resolve) => {
-    existing
-      .transition()
-      .duration(duration)
-      .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-      .on('end', () => resolve())
-  })
-}
-
-async function fadePreviousStatLines(
-  sampleGroup: SVGGElement,
-  signal: AnimSignal,
-  timingMs: number,
-  numCatMode: boolean,
-  nGroups: number,
-): Promise<void> {
-  clearSampleDiffSummaries(sampleGroup)
-  if (!numCatMode) {
-    await promoteOneNumStatsToHistory(sampleGroup, signal, timingMs)
-    return
-  }
-  if (nGroups === 2) {
-    await promoteTwoGroupStatsToHistory(sampleGroup, signal, timingMs)
-    return
-  }
-
-  const existing = d3
-    .select(sampleGroup)
-    .selectAll<SVGLineElement, unknown>('.sample-stat-line')
-  if (existing.empty()) return
-
-  const duration = timingMs > 0 ? Math.min(300, timingMs * 0.3) : 0
-  if (duration <= 0 || signal.aborted) {
-    existing.attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-    return
-  }
-
-  await new Promise<void>((resolve) => {
-    existing
-      .transition()
-      .duration(duration)
-      .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-      .on('end', () => resolve())
-  })
 }
 
 function appendOneNumSampleStat(
@@ -558,6 +480,7 @@ function appendDistMark(
 export type SampleBatchAnimContext = {
   sampleGroup: SVGGElement
   distGroup: SVGGElement
+  flyGroup: SVGGElement
   population: number[]
   populationGroup: number[]
   showcaseSampleIndices: number[]
@@ -591,6 +514,7 @@ export async function animateSampleBatch(
   const {
     sampleGroup,
     distGroup,
+    flyGroup,
     population,
     populationGroup,
     showcaseSampleIndices,
@@ -619,6 +543,9 @@ export async function animateSampleBatch(
 
   if (signal.aborted || reps.length === 0) return
 
+  resetSamplePane(sampleGroup)
+  clearFlyLayer(flyGroup)
+
   drawSampleDots(
     sampleGroup,
     showcaseSampleIndices,
@@ -639,20 +566,6 @@ export async function animateSampleBatch(
     )
   }
 
-  if (numCatMode) {
-    d3.select(sampleGroup)
-      .selectAll<SVGLineElement, unknown>('.sample-stat-line')
-      .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-    d3.select(sampleGroup).selectAll('.sample-stat-triangle, .sample-stat-label').remove()
-  } else {
-    d3.select(sampleGroup).selectAll('.sample-stat-line').remove()
-    d3.select(sampleGroup)
-      .selectAll('.sample-stat-barcode-vline')
-      .attr('opacity', PREVIOUS_STAT_OPACITY)
-    d3.select(sampleGroup).selectAll('.sample-stat-triangle, .sample-stat-label').remove()
-  }
-  removeSampleStatSummaries(sampleGroup)
-
   for (const rep of reps) {
     if (numCatMode) {
       const groupStats = sampleGroupStats(
@@ -662,12 +575,21 @@ export async function animateSampleBatch(
         nGroups,
         statistic,
       )
+      const deviationCenter = avgDevCenterStat(
+        numCatMode,
+        statKind,
+        nGroups,
+        rep.sampleIndices,
+        population,
+        statistic,
+        populationGrandStat,
+      )
       appendGroupedSampleStats(
         sampleGroup,
         sampleX,
         groupStats,
         groupBands,
-        populationGrandStat,
+        deviationCenter,
         statistic,
         statKind,
         nGroups,
@@ -821,6 +743,9 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
 
   if (signal.aborted) return
 
+  resetSamplePane(sampleGroup)
+  clearFlyLayer(flyGroup)
+
   const radius = dotRadius
   const showSamplingAnimation = m < 20 && !includeDist
   const fullDistAnimation = includeDist && m < 20
@@ -847,6 +772,16 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
       )
     : []
 
+  const deviationCenter = avgDevCenterStat(
+    numCatMode,
+    statKind,
+    nGroups,
+    sampleIndices,
+    population,
+    statistic,
+    populationGrandStat,
+  )
+
   const appendStats = (showSummary: boolean) => {
     if (numCatMode) {
       appendGroupedSampleStats(
@@ -854,7 +789,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         sampleX,
         groupStats,
         groupBands,
-        populationGrandStat,
+        deviationCenter,
         statistic,
         statKind,
         nGroups,
@@ -927,7 +862,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         sampleGroup,
         sampleX,
         groupStats,
-        populationGrandStat,
+        deviationCenter,
         groupBands,
         replicateIndex,
         innerWidth,
@@ -939,30 +874,11 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     }
   }
 
-  d3.select(sampleGroup)
-    .selectAll(`.sample-stat-summary[data-index="${replicateIndex}"]`)
-    .remove()
-  d3.select(sampleGroup).selectAll('.sample-dot').remove()
-  d3.select(sampleGroup).selectAll('.sample-band-label').remove()
-  d3.select(flyGroup).selectAll('.fly-dot').remove()
-
   if (includeDist) {
     clearHighlights(popGroup)
   }
 
   if (accumulateOnly) {
-    if (numCatMode) {
-      if (nGroups === 2) {
-        await promoteTwoGroupStatsToHistory(sampleGroup, signal, timingMs)
-      } else {
-        d3.select(sampleGroup)
-          .selectAll<SVGLineElement, unknown>('.sample-stat-line')
-          .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
-      }
-    } else {
-      await promoteOneNumStatsToHistory(sampleGroup, signal, timingMs)
-    }
-    removeSampleStatSummaries(sampleGroup)
     if (signal.aborted) return
 
     appendStats(!accumulateOnly)
@@ -1105,9 +1021,6 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
 
   if (signal.aborted) return
 
-  await fadePreviousStatLines(sampleGroup, signal, timingMs, numCatMode, nGroups)
-  if (signal.aborted) return
-
   if (showSamplingAnimation) {
     appendSampleMeans()
     await delay(sampleTiming.statDisplayPauseMs, signal)
@@ -1148,7 +1061,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         sampleX,
         groupStats,
         groupBands,
-        populationGrandStat,
+        deviationCenter,
         statistic,
         statKind,
         nGroups,
@@ -1215,7 +1128,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     paneInnerHeight,
     groupBands,
     statistic,
-    populationGrandStat,
+    populationGrandStat: deviationCenter,
     populationStat,
     statZoneTop,
     m,
@@ -1264,6 +1177,18 @@ export async function animateDistDrop(ctx: DistAnimContext): Promise<void> {
   await animateDistArrowDrop(ctx)
 }
 
+export function resetSamplePane(sampleGroup: SVGGElement): void {
+  const sel = d3.select(sampleGroup)
+  sel.selectAll('.sample-dot').remove()
+  sel.selectAll('.sample-band-label').remove()
+  sel.selectAll('.sample-stat-line').remove()
+  sel.selectAll('.sample-stat-barcode-vline').remove()
+  sel.selectAll('.sample-stat-summary').remove()
+  sel.selectAll('.sample-stat-triangle').remove()
+  sel.selectAll('.sample-stat-label').remove()
+  sel.selectAll('.dist-marker').remove()
+}
+
 export function clearFlyLayer(flyGroup: SVGGElement) {
   d3.select(flyGroup).selectAll('.fly-dot, .dist-arrow-fly, .dist-line-fly').remove()
 }
@@ -1288,14 +1213,12 @@ export function clearAllAnimationLayers(
 ) {
   clearHighlights(popGroup, numCatMode)
   clearFlyLayer(flyGroup)
-  d3.select(sampleGroup).selectAll('.sample-dot').remove()
-  if (!keepStatLines) {
-    d3.select(sampleGroup).selectAll('.sample-stat-line').remove()
-    d3.select(sampleGroup).selectAll('.sample-stat-barcode-vline').remove()
-    d3.select(sampleGroup).selectAll('.sample-stat-summary').remove()
+  if (keepStatLines) {
+    d3.select(sampleGroup).selectAll('.sample-dot').remove()
+    d3.select(sampleGroup).selectAll('.sample-band-label').remove()
+  } else {
+    resetSamplePane(sampleGroup)
   }
   d3.select(distGroup).selectAll('.dist-dot').remove()
   removeDistTransientOverlays(distGroup)
-  d3.select(sampleGroup).selectAll('.sample-stat-triangle').remove()
-  d3.select(sampleGroup).selectAll('.sample-stat-label').remove()
 }

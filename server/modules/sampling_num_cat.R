@@ -133,7 +133,6 @@ compute_num_cat_sampling <- function(
     stat_kind <- if (n_groups == 2L) "difference" else "average_deviation"
 
     pop_domain <- scale_domain(x)
-    population_grand <- sample_statistic(x, statistic)
     sample_stats <- numeric(num_reps)
     pool_reps <- min(num_reps, ANIM_POOL_SIZE)
     sample_indices <- integer(pool_reps * sample_size)
@@ -154,8 +153,7 @@ compute_num_cat_sampling <- function(
             sy,
             levels,
             statistic,
-            n_groups,
-            population_grand = population_grand
+            n_groups
         )
         if (i <= pool_reps) {
             sample_indices[(idx_offset + 1L):(idx_offset + sample_size)] <- idx - 1L

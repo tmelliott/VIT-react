@@ -5,24 +5,58 @@ import { DIST_DOT_COLOR, DIST_DOT_OPACITY } from './paneStyle'
 export type DistDotPosition = { x: number; y: number }
 export type DistLayout = Map<number, DistDotPosition>
 
-function fitLayoutToBand(
-  layout: DistLayout,
+function fitStackToBand(
+  ys: Map<number, number>,
   floorY: number,
-  plotTopY: number,
+  plotBoundY: number,
   r: number,
 ): void {
-  if (layout.size === 0) return
+  if (ys.size === 0) return
   let top = Infinity
-  for (const pos of layout.values()) {
-    top = Math.min(top, pos.y - r)
+  for (const y of ys.values()) {
+    top = Math.min(top, y - r)
   }
   const pileHeight = floorY + r - top
-  const available = floorY + r - (plotTopY + r)
-  if (pileHeight <= available || pileHeight <= 0) return
+  const available = floorY + r - (plotBoundY + r)
+  if (pileHeight <= available || pileHeight <= 0 || available <= 0) return
   const scale = available / pileHeight
-  for (const pos of layout.values()) {
-    pos.y = floorY - (floorY - pos.y) * scale
+  for (const [key, y] of ys) {
+    ys.set(key, floorY - (floorY - y) * scale)
   }
+}
+
+/**
+ * Bin-stack y-positions upward from a floor row (mini dot plot / axis pile).
+ * Items are processed in order so earlier entries sit closer to the floor.
+ */
+export function stackDotYsByBin(
+  items: Array<{ key: number; x: number }>,
+  floorY: number,
+  dotRadius: number,
+  xRange: [number, number],
+  plotBoundY: number,
+): Map<number, number> {
+  const r = dotRadius - 1
+  const dotSize = r * 2
+  const [rangeMin, rangeMax] = xRange
+  const span = Math.abs(rangeMax - rangeMin)
+  const nBins = Math.max(1, Math.ceil(span / dotSize))
+  const stackCounts = new Map<number, number>()
+  const ys = new Map<number, number>()
+
+  for (const { key, x } of items) {
+    if (!Number.isFinite(x)) continue
+    const binIdx = Math.max(
+      0,
+      Math.min(nBins - 1, Math.floor((x - rangeMin) / dotSize)),
+    )
+    const stack = (stackCounts.get(binIdx) ?? 0) + 1
+    stackCounts.set(binIdx, stack)
+    ys.set(key, floorY - (stack - 1) * dotSize)
+  }
+
+  fitStackToBand(ys, floorY, plotBoundY, r)
+  return ys
 }
 
 /**
@@ -37,32 +71,29 @@ export function precomputeDistLayout(
   dotRadius: number,
 ): DistLayout {
   const r = dotRadius - 1
-  const dotSize = r * 2
   const plotTopY = dotRadius
-  const [rangeMin, rangeMax] = distX.range()
-  const span = Math.abs(rangeMax - rangeMin)
-  const nBins = Math.max(1, Math.ceil(span / dotSize))
-  const stackCounts = new Map<number, number>()
-  const layout: DistLayout = new Map()
+  const items: Array<{ key: number; x: number }> = []
 
   for (let i = 0; i < stats.length; i++) {
     const stat = stats[i]!
     if (!Number.isFinite(stat)) continue
     const x = distX(stat)
     if (x == null || !Number.isFinite(x)) continue
-    const binIdx = Math.max(
-      0,
-      Math.min(nBins - 1, Math.floor((x - rangeMin) / dotSize)),
-    )
-    const stack = (stackCounts.get(binIdx) ?? 0) + 1
-    stackCounts.set(binIdx, stack)
-    layout.set(i, {
-      x,
-      y: distBaselineY - (stack - 1) * dotSize,
-    })
+    items.push({ key: i, x })
   }
 
-  fitLayoutToBand(layout, distBaselineY, plotTopY, r)
+  const ys = stackDotYsByBin(
+    items,
+    distBaselineY,
+    dotRadius,
+    distX.range() as [number, number],
+    plotTopY,
+  )
+  const layout: DistLayout = new Map()
+  for (const { key, x } of items) {
+    const y = ys.get(key)
+    if (y != null) layout.set(key, { x, y })
+  }
   return layout
 }
 

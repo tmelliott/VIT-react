@@ -127,7 +127,7 @@ export type SampleAnimationTiming = {
   distDevPointPauseMs: number
   /** K≥3: fade out per-group deviation lines. */
   distDevLineFadeOutMs: number
-  /** K≥3: avg-dev line points up at staging row. */
+  /** K≥3: align endpoint dots to a common row. */
   distAvgDevStageMs: number
   /** K≥3: pause after triangle marker at the mean. */
   distTrianglePauseMs: number

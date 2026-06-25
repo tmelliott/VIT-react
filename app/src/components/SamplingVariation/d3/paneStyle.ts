@@ -9,6 +9,11 @@ export const POP_DOT_STROKE = '#64748b'
 export const POP_DOT_STROKE_WIDTH = 1.5
 export const POP_DOT_STROKE_OPACITY = 0.85
 export const REFERENCE_STAT_COLOR = '#d1d5db'
+/** P3 population reference — dark enough to read over stacked dist dots. */
+export const DIST_POPULATION_REF_COLOR = '#374151'
+export const DIST_REF_HALO_COLOR = '#ffffff'
+export const DIST_REF_HALO_WIDTH = 5
+export const DIST_POPULATION_REF_WIDTH = 2
 export const DIST_BARCODE_VLINE_COLOR = '#111827'
 export const DIST_BARCODE_BLUE = '#2563eb'
 export const DIST_BARCODE_BLUE_OPACITY = 0.55

@@ -163,6 +163,7 @@ export function useAnimationController(
           await animateSampleBatch({
             sampleGroup: handle.sampleGroup,
             distGroup: handle.distGroup,
+            flyGroup: handle.flyGroup,
             population,
             populationGroup: handle.numCatMode
               ? populationGroup
@@ -197,10 +198,6 @@ export function useAnimationController(
         for (let r = start; r < end; r++) {
           if (signal.aborted) break
           await runOne(r)
-          if (m === 5 && !signal.aborted && r < end - 1) {
-            clearSampleTransient(handle.sampleGroup)
-            clearFlyLayer(handle.flyGroup)
-          }
         }
       }
 

@@ -4,11 +4,10 @@ import {
   drawHorizontalLine,
   transitionHorizontalArrow,
   transitionHorizontalLine,
-  transitionHorizontalLineTo,
   transitionHorizontalLinesTo,
   transitionVerticalLine,
 } from './drawArrow'
-import { appendDistDotElement, distTarget, type DistLayout } from './distPhysics'
+import { appendDistDotElement, distTarget, stackDotYsByBin, type DistLayout } from './distPhysics'
 import { type StatKind } from './sampleStatSummary'
 import { twoGroupDiffZone, type GroupBand } from './groupLayout'
 import { PANE, type PaneLayout, toAbsolute } from './paneCoords'
@@ -44,6 +43,7 @@ export type DistArrowDropContext = {
   paneInnerHeight: number
   groupBands: GroupBand[]
   statistic: 'mean' | 'median'
+  /** k≥3: sample grand mean/median; otherwise unused. */
   populationGrandStat: number
   populationStat: number
   statZoneTop: number
@@ -107,9 +107,27 @@ async function fadeInDistDot(
 export function removeDistTransientOverlays(distGroup: SVGGElement) {
   d3.select(distGroup)
     .selectAll(
-      '.dist-stage-dev-line, .dist-avg-dev-line, .dist-transient-arrow, .dist-stat-arrow, .dist-zero-vline, .dist-stage-endpoint, .dist-avg-stage-vline, .dist-stage-triangle, .dist-transient-stat-line',
+      '.dist-stage-dev-line, .dist-avg-dev-line, .dist-transient-arrow, .dist-stat-arrow, .dist-zero-vline, .dist-stage-endpoint, .dist-avg-stage-vline, .dist-stage-triangle, .dist-stage-triangle-wrap, .dist-transient-stat-line',
     )
     .remove()
+}
+
+function transitionCircleCy(
+  circle: d3.Selection<SVGCircleElement, unknown, null, undefined>,
+  endCy: number,
+  duration: number,
+): Promise<void> {
+  if (circle.empty()) return Promise.resolve()
+  if (duration <= 0) {
+    circle.attr('cy', endCy)
+    return Promise.resolve()
+  }
+  return circle
+    .transition()
+    .duration(duration)
+    .attr('cy', endCy)
+    .end()
+    .then(() => undefined)
 }
 
 export async function animateDistArrowDrop(
@@ -287,8 +305,9 @@ export async function animateDistArrowDrop(
     }
 
     type DevLineSpec = {
-      sampleFromX: number
-      sampleToX: number
+      /** Left-to-right span in sample pane x coords (matches P2 arrow segment). */
+      lineLeftX: number
+      lineRightX: number
       sampleY: number
       stageY: number
       devMagnitude: number
@@ -298,14 +317,16 @@ export async function animateDistArrowDrop(
     for (const band of groupBands) {
       const stat = groupStats[band.index]
       if (stat == null || !Number.isFinite(stat)) continue
-      const sampleFromX = sampleX(grandMean)!
-      const sampleToX = sampleX(stat)!
-      if (Math.abs(sampleToX - sampleFromX) < 1) continue
+      const grandPx = sampleX(grandMean)!
+      const statPx = sampleX(stat)!
+      const lineLeftX = Math.min(grandPx, statPx)
+      const lineRightX = Math.max(grandPx, statPx)
+      if (lineRightX - lineLeftX < 1) continue
       const devMagnitude = Math.abs(stat - grandMean)
       if (!Number.isFinite(devMagnitude) || devMagnitude < 1e-9) continue
       devLines.push({
-        sampleFromX,
-        sampleToX,
+        lineLeftX,
+        lineRightX,
         sampleY: band.top + band.height / 2,
         stageY: DIST_STAGE_Y + devLines.length * DIST_STAGE_LINE_GAP,
         devMagnitude,
@@ -318,25 +339,25 @@ export async function animateDistArrowDrop(
           const startFrom = toAbsolute(
             paneLayout,
             PANE.SAMPLE,
-            dl.sampleFromX,
+            dl.lineLeftX,
             dl.sampleY,
           )
           const startTo = toAbsolute(
             paneLayout,
             PANE.SAMPLE,
-            dl.sampleToX,
+            dl.lineRightX,
             dl.sampleY,
           )
           const endFrom = toAbsolute(
             paneLayout,
             PANE.DIST,
-            dl.sampleFromX,
+            dl.lineLeftX,
             dl.stageY,
           )
           const endTo = toAbsolute(
             paneLayout,
             PANE.DIST,
-            dl.sampleToX,
+            dl.lineRightX,
             dl.stageY,
           )
 
@@ -371,8 +392,8 @@ export async function animateDistArrowDrop(
 
           drawHorizontalLine(
             distSel,
-            dl.sampleFromX,
-            dl.sampleToX,
+            dl.lineLeftX,
+            dl.lineRightX,
             dl.stageY,
             '#9ca3af',
             0.75,
@@ -415,100 +436,81 @@ export async function animateDistArrowDrop(
     const stageLines = distSel.selectAll<SVGLineElement, unknown>(
       '.dist-stage-dev-line',
     )
-    await Promise.all(
-      stageLines.nodes().map((node) => {
-        const x2 = Number(d3.select(node).attr('x2'))
-        return distSel
-          .append('circle')
-          .attr('class', 'dist-stage-endpoint')
-          .attr('cx', x2)
-          .attr('cy', rowY)
-          .attr('r', dotRadius - 1)
-          .attr('fill', '#9ca3af')
-          .attr('opacity', 0)
-          .transition()
-          .duration(sampleTiming.distDotFadeInMs)
-          .attr('opacity', 0.9)
-          .end()
-          .then(() => undefined)
-      }),
-    )
 
-    await waitWithSignal(sampleTiming.distDevPointPauseMs, signal)
+    if (!stageLines.empty()) {
+      await Promise.all(
+        stageLines.nodes().map((node) => {
+          const lineSel = d3.select(node)
+          const x2 = Number(lineSel.attr('x2'))
+          const lineY = Number(lineSel.attr('y1'))
+          return distSel
+            .append('circle')
+            .attr('class', 'dist-stage-endpoint')
+            .attr('cx', x2)
+            .attr('cy', lineY)
+            .attr('r', dotRadius - 1)
+            .attr('fill', '#9ca3af')
+            .attr('opacity', 0)
+            .transition()
+            .duration(sampleTiming.distDotFadeInMs)
+            .attr('opacity', 0.9)
+            .end()
+            .then(() => undefined)
+        }),
+      )
+
+      await waitWithSignal(sampleTiming.distDevPointPauseMs, signal)
+      if (signal.aborted) return
+
+      await fadeOpacity(stageLines, 0, sampleTiming.distDevLineFadeOutMs)
+      stageLines.remove()
+      if (signal.aborted) return
+
+      const endpoints = distSel.selectAll<SVGCircleElement, unknown>(
+        '.dist-stage-endpoint',
+      )
+      const stackItems = endpoints.nodes().map((node, index) => ({
+        key: index,
+        x: Number(d3.select(node).attr('cx')),
+      }))
+      const stackedYs = stackDotYsByBin(
+        stackItems,
+        rowY,
+        dotRadius,
+        distX.range() as [number, number],
+        DIST_STAGE_Y,
+      )
+      await Promise.all(
+        endpoints.nodes().map((node, index) =>
+          transitionCircleCy(
+            d3.select(node),
+            stackedYs.get(index) ?? rowY,
+            sampleTiming.distAvgDevStageMs,
+          ),
+        ),
+      )
+    }
+
     if (signal.aborted) return
-
-    await fadeOpacity(stageLines, 0, sampleTiming.distDevLineFadeOutMs)
-    await fadeOpacity(distSel.selectAll('.dist-stage-endpoint'), 0, sampleTiming.distDevLineFadeOutMs)
-    stageLines.remove()
-    distSel.selectAll('.dist-stage-endpoint').remove()
-    if (signal.aborted) return
-
-    const avgStageY = rowY - 20
-    const avgHoriz = drawHorizontalLine(
-      distSel,
-      zeroX,
-      endToX,
-      avgStageY,
-      '#dc2626',
-      1,
-      { minSpan: 0 },
-    ).attr('class', 'dist-avg-dev-line')
-
-    const upTop = avgStageY - 28
-    const upLine = distSel
-      .append('line')
-      .attr('class', 'dist-avg-stage-vline')
-      .attr('x1', endToX)
-      .attr('x2', endToX)
-      .attr('y1', avgStageY)
-      .attr('y2', avgStageY)
-      .attr('stroke', '#dc2626')
-      .attr('stroke-width', 2)
-      .attr('stroke-linecap', 'round')
-
-    await Promise.all([
-      transitionVerticalLine(
-        upLine,
-        endToX,
-        avgStageY,
-        endToX,
-        avgStageY,
-        endToX,
-        upTop,
-        upTop,
-        sampleTiming.distAvgDevStageMs,
-      ),
-      fadeOpacity(avgHoriz, 0, sampleTiming.distAvgDevStageMs),
-    ])
-    if (signal.aborted) return
-
-    appendUpTriangle(
-      distGroup,
-      endToX,
-      upTop - TRIANGLE_SIZE,
-      TRIANGLE_SIZE,
-      '#dc2626',
-      'dist-stage-triangle',
-    )
 
     await waitWithSignal(sampleTiming.distTrianglePauseMs, signal)
     if (signal.aborted) return
 
-    upLine.remove()
-    distSel.select('.dist-stage-triangle').remove()
-    avgHoriz.attr('opacity', 1).attr('y1', avgStageY).attr('y2', avgStageY)
-
-    try {
-      await transitionHorizontalLineTo(
-        avgHoriz,
-        zeroX,
-        endToX,
-        distBaselineY,
-        sampleTiming.distArrowDropMs,
-      )
-    } catch {
-      // interrupted
-    }
+    const triangleGap = 10
+    const triangleTipY = rowY + triangleGap
+    const triangleWrap = distSel
+      .append('g')
+      .attr('class', 'dist-stage-triangle-wrap')
+      .attr('opacity', 0)
+    appendUpTriangle(
+      triangleWrap.node()!,
+      endToX,
+      triangleTipY,
+      TRIANGLE_SIZE,
+      '#dc2626',
+      'dist-stage-triangle',
+    )
+    await fadeOpacity(triangleWrap, 1, Math.min(200, sampleTiming.distDotFadeInMs))
     if (signal.aborted) return
 
     await waitWithSignal(sampleTiming.distPostArrowPauseMs, signal)
@@ -516,19 +518,23 @@ export async function animateDistArrowDrop(
 
     const dotX = target?.x ?? endToX
     const dotY = target?.y ?? distBaselineY
-    await fadeInDistDot(
+    const dropStartY = triangleTipY + TRIANGLE_SIZE * 0.5
+    appendDistDotElement(
       distGroup,
       replicateIndex,
       sampleStat,
       dotX,
-      dotY,
+      dropStartY,
       dotRadius,
-      sampleTiming.distDotFadeInMs,
     )
-    if (signal.aborted) return
-
-    await fadeOpacity(distSel.select('.dist-avg-dev-line'), 0, sampleTiming.distArrowFadeOutMs)
-    distSel.select('.dist-avg-dev-line').remove()
+    const finalDot = d3
+      .select(distGroup)
+      .select<SVGCircleElement>(`.dist-dot[data-index="${replicateIndex}"]`)
+    try {
+      await transitionCircleCy(finalDot, dotY, sampleTiming.distArrowDropMs)
+    } catch {
+      // interrupted
+    }
   } else {
     const axisLocalX = distX(sampleStat)!
     const dotR = dotRadius - 1

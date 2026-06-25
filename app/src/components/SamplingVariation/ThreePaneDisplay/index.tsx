@@ -34,7 +34,13 @@ import {
   appendAverageDeviationLabel,
   appendTwoGroupPopulationDiffDisplay,
 } from '../d3/sampleStatSummary'
-import { drawReferenceStatLine, removeReferenceStatLine } from '../d3/referenceLine'
+import {
+  drawDistPopulationReferenceLine,
+  drawDistTwoGroupReferenceLines,
+  drawReferenceStatLine,
+  removeDistReferenceLines,
+  removeReferenceStatLine,
+} from '../d3/referenceLine'
 import type { PaneLayout } from '../d3/paneCoords'
 import { domainsFromState, usePaneLayout, useSamplingScales } from '../hooks/useSamplingScales'
 import {
@@ -313,6 +319,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     const popGroupRef = useRef<SVGGElement>(null)
     const sampleGroupRef = useRef<SVGGElement>(null)
     const distGroupRef = useRef<SVGGElement>(null)
+    const distRefGroupRef = useRef<SVGGElement>(null)
     const flyGroupRef = useRef<SVGGElement>(null)
     const axisRefs = useRef<(SVGGElement | null)[]>([null, null, null])
     const [size, setSize] = useState({ width: 720, height: 540 })
@@ -543,22 +550,23 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     useEffect(() => {
       const sampleG = sampleGroupRef.current
       const distG = distGroupRef.current
+      const distRefG = distRefGroupRef.current
       if (!sampleG || !distG) return
       if (moduleReady) return
       d3.select(sampleG).selectAll('*').remove()
       d3.select(distG).selectAll('*').remove()
+      if (distRefG) d3.select(distRefG).selectAll('*').remove()
     }, [moduleReady, numCatMode, groupBands, innerWidth])
 
     useEffect(() => {
-      const g = distGroupRef.current
+      const g = distRefGroupRef.current
       if (!g) return
-      removeReferenceStatLine(g)
-      d3.select(g).selectAll('.dist-pop-stat-line').remove()
+      removeDistReferenceLines(g)
       if (!moduleReady) {
         return
       }
       if (numCatMode && nGroups === 2) {
-        drawReferenceStatLine(g, distX, 0, innerHeight)
+        drawDistTwoGroupReferenceLines(g, distX, populationStat ?? NaN, innerHeight)
         return
       }
       if (
@@ -568,7 +576,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       ) {
         return
       }
-      drawReferenceStatLine(g, distX, populationStat, innerHeight)
+      drawDistPopulationReferenceLine(g, distX, populationStat, innerHeight)
     }, [
       moduleReady,
       showPopulationStat,
@@ -681,7 +689,14 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
                       <g ref={sampleGroupRef} transform="translate(0, 0)" />
                     )}
                     {paneIndex === 2 && (
-                      <g ref={distGroupRef} transform="translate(0, 0)" />
+                      <>
+                        <g ref={distGroupRef} transform="translate(0, 0)" />
+                        <g
+                          ref={distRefGroupRef}
+                          className="dist-ref-layer"
+                          transform="translate(0, 0)"
+                        />
+                      </>
                     )}
                   </g>
                   <g
