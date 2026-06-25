@@ -424,6 +424,7 @@ export function transitionVerticalLine(
   endY1: number,
   endY2: number,
   duration: number,
+  ease?: (t: number) => number,
 ): Promise<void> {
   line.attr('x1', x1).attr('x2', x2).attr('y1', y1).attr('y2', y2)
 
@@ -436,9 +437,9 @@ export function transitionVerticalLine(
     return Promise.resolve()
   }
 
-  return line
-    .transition()
-    .duration(duration)
+  let t = line.transition().duration(duration)
+  if (ease) t = t.ease(ease)
+  return t
     .attr('x1', endX)
     .attr('x2', endX)
     .attr('y1', endY1)

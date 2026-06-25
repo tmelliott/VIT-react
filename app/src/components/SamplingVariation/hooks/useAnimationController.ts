@@ -144,6 +144,7 @@ export function useAnimationController(
           paneInnerHeight: handle.paneInnerHeight,
           populationGrandStat: handle.grandMean,
           populationStat: state.population_stat ?? 0,
+          m,
         })
       }
 
@@ -196,7 +197,7 @@ export function useAnimationController(
         for (let r = start; r < end; r++) {
           if (signal.aborted) break
           await runOne(r)
-          if (m === 5 && !signal.aborted) {
+          if (m === 5 && !signal.aborted && r < end - 1) {
             clearSampleTransient(handle.sampleGroup)
             clearFlyLayer(handle.flyGroup)
           }

@@ -20,6 +20,7 @@ import {
   animateSampleDeviationSummary,
   animateTwoGroupSampleDiffSummary,
   appendTwoGroupBandSampleStat,
+  clearSampleDiffSummaries,
   removeSampleStatSummaries,
   type StatKind,
 } from './sampleStatSummary'
@@ -33,7 +34,16 @@ import {
   SAMPLE_DOT_OPACITY,
 } from './paneStyle'
 import { type PaneLayout, PANE, toAbsolute } from './paneCoords'
-import type { SampleAnimationTiming } from '../types'
+import type { SampleAnimationTiming, MValue } from '../types'
+
+const INSTANT_TWO_GROUP_SUMMARY_TIMING = {
+  twoGroupDropLineMs: 0,
+  twoGroupPreArrowPauseMs: 0,
+  twoGroupArrowMs: 0,
+} as const satisfies Pick<
+  SampleAnimationTiming,
+  'twoGroupDropLineMs' | 'twoGroupPreArrowPauseMs' | 'twoGroupArrowMs'
+>
 
 export type AnimSignal = {
   aborted: boolean
@@ -94,6 +104,19 @@ export function delay(ms: number, signal: AnimSignal): Promise<void> {
     }
     requestAnimationFrame(tick)
   })
+}
+
+/** Yield so DOM updates from the current step are painted before the next frame. */
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+}
+
+async function holdFastStepFrame(signal: AnimSignal, timingMs: number): Promise<void> {
+  if (signal.aborted) return
+  await waitForPaint()
+  await delay(timingMs, signal)
 }
 
 function transitionPromiseGeneric<T extends d3.BaseType>(
@@ -257,7 +280,7 @@ async function fadePreviousStatLines(
   numCatMode: boolean,
   nGroups: number,
 ): Promise<void> {
-  removeSampleStatSummaries(sampleGroup)
+  clearSampleDiffSummaries(sampleGroup)
   if (!numCatMode) {
     await promoteOneNumStatsToHistory(sampleGroup, signal, timingMs)
     return
@@ -688,6 +711,29 @@ export async function animateSampleBatch(
         dotRadius,
       )
     }
+
+    const lastRep = reps[reps.length - 1]
+    if (lastRep) {
+      drawSampleDots(
+        sampleGroup,
+        lastRep.sampleIndices,
+        population,
+        populationGroup,
+        sampleX,
+        baselineY,
+        dotRadius,
+        numCatMode,
+        groupBands,
+      )
+      if (numCatMode) {
+        syncSampleBandLabels(
+          sampleGroup,
+          groupBands,
+          lastRep.sampleIndices,
+          populationGroup,
+        )
+      }
+    }
   }
 
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
@@ -730,6 +776,7 @@ export type SampleAnimContext = {
   paneInnerHeight: number
   populationGrandStat: number
   populationStat: number
+  m: MValue
 }
 
 export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
@@ -769,11 +816,16 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     paneInnerHeight,
     populationGrandStat,
     populationStat,
+    m,
   } = ctx
 
   if (signal.aborted) return
 
   const radius = dotRadius
+  const showSamplingAnimation = m < 20 && !includeDist
+  const fullDistAnimation = includeDist && m < 20
+  const fastStepHold = m === 20 && !showSamplingAnimation
+  const showP2CatSummary = numCatMode && nGroups >= 2 && !accumulateOnly
   const sampleValues = sampleIndices.map((i) => population[i]!)
   const sampleY = numCatMode
     ? sampleIndices.map((popIdx) => {
@@ -894,6 +946,10 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
   d3.select(sampleGroup).selectAll('.sample-band-label').remove()
   d3.select(flyGroup).selectAll('.fly-dot').remove()
 
+  if (includeDist) {
+    clearHighlights(popGroup)
+  }
+
   if (accumulateOnly) {
     if (numCatMode) {
       if (nGroups === 2) {
@@ -935,7 +991,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     return
   }
 
-  if (fullAnimation) {
+  if (showSamplingAnimation) {
     clearHighlights(popGroup)
     if (signal.aborted) return
 
@@ -1052,26 +1108,83 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
   await fadePreviousStatLines(sampleGroup, signal, timingMs, numCatMode, nGroups)
   if (signal.aborted) return
 
-  if (fullAnimation) {
+  if (showSamplingAnimation) {
     appendSampleMeans()
     await delay(sampleTiming.statDisplayPauseMs, signal)
     if (signal.aborted) return
 
-    if (numCatMode && nGroups >= 2) {
+    if (showP2CatSummary) {
       await animateCatSummary()
       if (signal.aborted) return
     }
+  } else if (numCatMode) {
+    appendGroupedSampleStatLines(
+      sampleGroup,
+      sampleX,
+      groupStats,
+      groupBands,
+      replicateIndex,
+      nGroups,
+      statistic,
+      true,
+    )
+    if (showP2CatSummary && (statKind === 'difference' || nGroups === 2)) {
+      await animateTwoGroupSampleDiffSummary(
+        sampleGroup,
+        sampleX,
+        groupStats,
+        groupBands,
+        twoGroupDiffZone(paneInnerHeight),
+        statistic,
+        replicateIndex,
+        INSTANT_TWO_GROUP_SUMMARY_TIMING,
+        () => Promise.resolve(),
+        () => signal.aborted,
+      )
+      if (signal.aborted) return
+    } else if (showP2CatSummary) {
+      appendSampleStatSummary(
+        sampleGroup,
+        sampleX,
+        groupStats,
+        groupBands,
+        populationGrandStat,
+        statistic,
+        statKind,
+        nGroups,
+        replicateIndex,
+        paneInnerHeight,
+        twoGroupDiffZone(paneInnerHeight),
+      )
+    }
   } else {
-    appendStats(!accumulateOnly)
+    appendOneNumSampleStat(
+      sampleGroup,
+      sampleX,
+      sampleStat,
+      statZoneTop,
+      boxTop,
+      boxAreaHeight,
+      dotRadius,
+      replicateIndex,
+    )
   }
 
   if (!includeDist) {
-    if (!fullAnimation) await delay(timingMs * 0.2, signal)
+    if (fastStepHold) {
+      await holdFastStepFrame(signal, timingMs)
+    } else if (!showSamplingAnimation) {
+      await delay(timingMs * 0.2, signal)
+    }
     return
   }
 
   if (!Number.isFinite(sampleStat)) {
-    if (!fullAnimation) await delay(timingMs * 0.2, signal)
+    if (fastStepHold) {
+      await holdFastStepFrame(signal, timingMs)
+    } else if (!showSamplingAnimation) {
+      await delay(timingMs * 0.2, signal)
+    }
     return
   }
 
@@ -1093,7 +1206,8 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     replicateIndex,
     timingMs,
     signal,
-    fullAnimation,
+    fullAnimation: fullDistAnimation,
+    sampleTiming,
     numCatMode,
     statKind,
     nGroups,
@@ -1104,7 +1218,12 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     populationGrandStat,
     populationStat,
     statZoneTop,
+    m,
   })
+
+  if (fastStepHold) {
+    await holdFastStepFrame(signal, timingMs)
+  }
 }
 
 export type DistAnimContext = {
@@ -1126,6 +1245,7 @@ export type DistAnimContext = {
   timingMs: number
   signal: AnimSignal
   fullAnimation: boolean
+  sampleTiming: SampleAnimationTiming
   numCatMode: boolean
   statKind: StatKind
   nGroups: number
@@ -1136,6 +1256,7 @@ export type DistAnimContext = {
   populationGrandStat: number
   populationStat: number
   statZoneTop: number
+  m: MValue
 }
 
 export async function animateDistDrop(ctx: DistAnimContext): Promise<void> {

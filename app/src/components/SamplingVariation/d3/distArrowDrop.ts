@@ -4,6 +4,7 @@ import {
   drawHorizontalLine,
   transitionHorizontalArrow,
   transitionHorizontalLine,
+  transitionHorizontalLineTo,
   transitionHorizontalLinesTo,
   transitionVerticalLine,
 } from './drawArrow'
@@ -12,6 +13,8 @@ import { type StatKind } from './sampleStatSummary'
 import { twoGroupDiffZone, type GroupBand } from './groupLayout'
 import { PANE, type PaneLayout, toAbsolute } from './paneCoords'
 import { DIST_BARCODE_VLINE_COLOR, DIST_STAGE_DROP_OFFSET, DIST_STAGE_LINE_GAP, DIST_STAGE_Y } from './paneStyle'
+import { appendUpTriangle, STAT_GAP, TRIANGLE_SIZE } from './statMarker'
+import type { SampleAnimationTiming, MValue } from '../types'
 import type { AnimSignal } from './animateSample'
 
 export type DistArrowDropContext = {
@@ -32,6 +35,7 @@ export type DistArrowDropContext = {
   timingMs: number
   signal: AnimSignal
   fullAnimation: boolean
+  sampleTiming: SampleAnimationTiming
   numCatMode: boolean
   statKind: StatKind
   nGroups: number
@@ -43,18 +47,67 @@ export type DistArrowDropContext = {
   populationGrandStat: number
   populationStat: number
   statZoneTop: number
+  m: MValue
 }
 
-function delay(ms: number): Promise<void> {
-  if (ms <= 0) return Promise.resolve()
-  return new Promise((resolve) => setTimeout(resolve, ms))
+function waitWithSignal(ms: number, signal: AnimSignal): Promise<void> {
+  if (ms <= 0 || signal.aborted) return Promise.resolve()
+  return new Promise((resolve) => {
+    const start = performance.now()
+    const tick = (now: number) => {
+      if (signal.aborted) {
+        resolve()
+        return
+      }
+      if (now - start >= ms) {
+        resolve()
+        return
+      }
+      requestAnimationFrame(tick)
+    }
+    requestAnimationFrame(tick)
+  })
+}
+
+function fadeOpacity(
+  selection: d3.Selection<d3.BaseType, unknown, null, undefined>,
+  opacity: number,
+  duration: number,
+): Promise<void> {
+  if (selection.empty() || duration <= 0) {
+    selection.attr('opacity', opacity)
+    return Promise.resolve()
+  }
+  return selection
+    .transition()
+    .duration(duration)
+    .attr('opacity', opacity)
+    .end()
+    .then(() => undefined)
+}
+
+async function fadeInDistDot(
+  distGroup: SVGGElement,
+  replicateIndex: number,
+  sampleStat: number,
+  x: number,
+  y: number,
+  dotRadius: number,
+  duration: number,
+): Promise<void> {
+  appendDistDotElement(distGroup, replicateIndex, sampleStat, x, y, dotRadius)
+  const dot = d3
+    .select(distGroup)
+    .select<SVGCircleElement>(`.dist-dot[data-index="${replicateIndex}"]`)
+  dot.attr('opacity', 0)
+  await fadeOpacity(dot, 1, duration)
 }
 
 /** Remove per-replicate P3 overlays; kept until the next distribution animation starts. */
 export function removeDistTransientOverlays(distGroup: SVGGElement) {
   d3.select(distGroup)
     .selectAll(
-      '.dist-stage-dev-line, .dist-avg-dev-line, .dist-transient-arrow, .dist-stat-arrow',
+      '.dist-stage-dev-line, .dist-avg-dev-line, .dist-transient-arrow, .dist-stat-arrow, .dist-zero-vline, .dist-stage-endpoint, .dist-avg-stage-vline, .dist-stage-triangle, .dist-transient-stat-line',
     )
     .remove()
 }
@@ -66,7 +119,6 @@ export async function animateDistArrowDrop(
     distGroup,
     flyGroup,
     paneLayout,
-    population,
     sampleStat,
     sampleX,
     distX,
@@ -79,17 +131,16 @@ export async function animateDistArrowDrop(
     timingMs,
     signal,
     fullAnimation,
+    sampleTiming,
     numCatMode,
     statKind,
     nGroups,
     groupStats,
-    sampleIndices,
     paneInnerHeight,
     groupBands,
-    statistic,
     populationGrandStat,
-    populationStat,
     statZoneTop,
+    m,
   } = ctx
 
   if (signal.aborted) return
@@ -122,21 +173,33 @@ export async function animateDistArrowDrop(
   }
 
   const flySel = d3.select(flyGroup)
+  const distSel = d3.select(distGroup)
   flySel.selectAll('.dist-arrow-fly, .dist-line-fly, .dist-stage-fly').remove()
   removeDistTransientOverlays(distGroup)
 
-  const stageDuration = Math.round(timingMs * 0.22)
-  const slideDuration = Math.round(timingMs * 0.28)
+  const slideMs = sampleTiming.slideToSampleMs
+  if (m === 1) {
+    await waitWithSignal(sampleTiming.distPreSlidePauseMs, signal)
+    if (signal.aborted) return
+  }
 
   if (numCatMode && (statKind === 'difference' || nGroups === 2)) {
     const low = groupStats[0]!
     const high = groupStats[1]!
-    if (!Number.isFinite(low) || !Number.isFinite(high)) {
+    const zeroX = distX(0)
+    const statX = distX(sampleStat)
+    if (
+      !Number.isFinite(low) ||
+      !Number.isFinite(high) ||
+      zeroX == null ||
+      statX == null ||
+      !Number.isFinite(zeroX) ||
+      !Number.isFinite(statX)
+    ) {
       placeDot()
       return
     }
 
-    const refStat = Number.isFinite(populationStat) ? populationStat : 0
     const diffZone = twoGroupDiffZone(paneInnerHeight)
     const startFrom = toAbsolute(
       paneLayout,
@@ -150,13 +213,8 @@ export async function animateDistArrowDrop(
       sampleX(high)!,
       diffZone.arrowY,
     )
-    const endFrom = toAbsolute(paneLayout, PANE.DIST, distX(refStat)!, distBaselineY)
-    const endTo = toAbsolute(
-      paneLayout,
-      PANE.DIST,
-      distX(sampleStat)!,
-      distBaselineY,
-    )
+    const endFrom = toAbsolute(paneLayout, PANE.DIST, zeroX, distBaselineY)
+    const endTo = toAbsolute(paneLayout, PANE.DIST, statX, distBaselineY)
 
     const arrowG = drawHorizontalArrow(
       flySel,
@@ -165,6 +223,8 @@ export async function animateDistArrowDrop(
       startFrom.y,
       '#dc2626',
       1,
+      undefined,
+      { minSpan: 0 },
     )
     arrowG.attr('class', 'dist-arrow-fly')
     try {
@@ -176,22 +236,37 @@ export async function animateDistArrowDrop(
         endFrom.x,
         endTo.x,
         endFrom.y,
-        stageDuration + slideDuration,
+        slideMs,
         '#dc2626',
         1,
       )
     } finally {
       flySel.selectAll('.dist-arrow-fly').remove()
     }
+    if (signal.aborted) return
 
     drawHorizontalArrow(
-      d3.select(distGroup),
-      distX(refStat)!,
-      distX(sampleStat)!,
+      distSel,
+      zeroX,
+      statX,
       distBaselineY,
       '#dc2626',
       1,
+      undefined,
+      { minSpan: 0 },
     ).attr('class', 'dist-transient-arrow')
+
+    const dotX = target?.x ?? statX
+    const dotY = target?.y ?? distBaselineY
+    appendDistDotElement(
+      distGroup,
+      replicateIndex,
+      sampleStat,
+      dotX,
+      dotY,
+      dotRadius,
+    )
+    distSel.select('.dist-transient-arrow').remove()
   } else if (numCatMode && statKind === 'average_deviation' && nGroups >= 3) {
     const grandMean = populationGrandStat
     if (!Number.isFinite(grandMean) || !Number.isFinite(sampleStat)) {
@@ -200,7 +275,13 @@ export async function animateDistArrowDrop(
     }
 
     const zeroX = distX(0)
-    if (zeroX == null || !Number.isFinite(zeroX)) {
+    const endToX = distX(sampleStat)
+    if (
+      zeroX == null ||
+      endToX == null ||
+      !Number.isFinite(zeroX) ||
+      !Number.isFinite(endToX)
+    ) {
       placeDot()
       return
     }
@@ -230,14 +311,6 @@ export async function animateDistArrowDrop(
         devMagnitude,
       })
     }
-
-    const distSel = d3.select(distGroup)
-
-    const flyInDuration = Math.round(timingMs * 0.28)
-    const slideDuration = Math.round(timingMs * 0.28)
-    const beforeRedDelay = Math.round(timingMs * 0.38)
-    const redHoldDelay = Math.round(timingMs * 0.42)
-    const redSlideDuration = Math.round(timingMs * 0.28)
 
     if (devLines.length > 0) {
       await Promise.all(
@@ -288,7 +361,7 @@ export async function animateDistArrowDrop(
               endFrom.x,
               endTo.x,
               endFrom.y,
-              flyInDuration,
+              slideMs,
             )
           } catch {
             // interrupted
@@ -319,64 +392,150 @@ export async function animateDistArrowDrop(
         (node) => {
           const dev = Number(d3.select(node).attr('data-dev'))
           const stageY = Number(d3.select(node).attr('data-stage-y'))
-          const endToX = distX(dev)
+          const magX = distX(dev)
           return {
             x1: zeroX,
-            x2: endToX != null && Number.isFinite(endToX) ? endToX : zeroX,
+            x2: magX != null && Number.isFinite(magX) ? magX : zeroX,
             y: stageY + DIST_STAGE_DROP_OFFSET,
           }
         },
-        slideDuration,
+        slideMs,
       )
     }
 
     if (signal.aborted) return
 
-    await delay(beforeRedDelay)
-    if (signal.aborted) return
-
-    const endToX = distX(sampleStat)
-    if (endToX == null || !Number.isFinite(endToX)) {
-      placeDot()
-      return
-    }
-
-    const redStageY =
+    const rowY =
       devLines.length > 0
         ? DIST_STAGE_Y +
           (devLines.length - 1) * DIST_STAGE_LINE_GAP +
-          DIST_STAGE_DROP_OFFSET +
-          14
-        : DIST_STAGE_Y + DIST_STAGE_DROP_OFFSET + 14
+          DIST_STAGE_DROP_OFFSET
+        : DIST_STAGE_Y + DIST_STAGE_DROP_OFFSET
 
-    drawHorizontalLine(
+    const stageLines = distSel.selectAll<SVGLineElement, unknown>(
+      '.dist-stage-dev-line',
+    )
+    await Promise.all(
+      stageLines.nodes().map((node) => {
+        const x2 = Number(d3.select(node).attr('x2'))
+        return distSel
+          .append('circle')
+          .attr('class', 'dist-stage-endpoint')
+          .attr('cx', x2)
+          .attr('cy', rowY)
+          .attr('r', dotRadius - 1)
+          .attr('fill', '#9ca3af')
+          .attr('opacity', 0)
+          .transition()
+          .duration(sampleTiming.distDotFadeInMs)
+          .attr('opacity', 0.9)
+          .end()
+          .then(() => undefined)
+      }),
+    )
+
+    await waitWithSignal(sampleTiming.distDevPointPauseMs, signal)
+    if (signal.aborted) return
+
+    await fadeOpacity(stageLines, 0, sampleTiming.distDevLineFadeOutMs)
+    await fadeOpacity(distSel.selectAll('.dist-stage-endpoint'), 0, sampleTiming.distDevLineFadeOutMs)
+    stageLines.remove()
+    distSel.selectAll('.dist-stage-endpoint').remove()
+    if (signal.aborted) return
+
+    const avgStageY = rowY - 20
+    const avgHoriz = drawHorizontalLine(
       distSel,
       zeroX,
       endToX,
-      redStageY,
+      avgStageY,
       '#dc2626',
       1,
       { minSpan: 0 },
     ).attr('class', 'dist-avg-dev-line')
 
-    await delay(redHoldDelay)
+    const upTop = avgStageY - 28
+    const upLine = distSel
+      .append('line')
+      .attr('class', 'dist-avg-stage-vline')
+      .attr('x1', endToX)
+      .attr('x2', endToX)
+      .attr('y1', avgStageY)
+      .attr('y2', avgStageY)
+      .attr('stroke', '#dc2626')
+      .attr('stroke-width', 2)
+      .attr('stroke-linecap', 'round')
+
+    await Promise.all([
+      transitionVerticalLine(
+        upLine,
+        endToX,
+        avgStageY,
+        endToX,
+        avgStageY,
+        endToX,
+        upTop,
+        upTop,
+        sampleTiming.distAvgDevStageMs,
+      ),
+      fadeOpacity(avgHoriz, 0, sampleTiming.distAvgDevStageMs),
+    ])
     if (signal.aborted) return
 
-    const redLine = distSel.select<SVGLineElement>('.dist-avg-dev-line')
+    appendUpTriangle(
+      distGroup,
+      endToX,
+      upTop - TRIANGLE_SIZE,
+      TRIANGLE_SIZE,
+      '#dc2626',
+      'dist-stage-triangle',
+    )
+
+    await waitWithSignal(sampleTiming.distTrianglePauseMs, signal)
+    if (signal.aborted) return
+
+    upLine.remove()
+    distSel.select('.dist-stage-triangle').remove()
+    avgHoriz.attr('opacity', 1).attr('y1', avgStageY).attr('y2', avgStageY)
+
     try {
       await transitionHorizontalLineTo(
-        redLine,
+        avgHoriz,
         zeroX,
         endToX,
         distBaselineY,
-        redSlideDuration,
+        sampleTiming.distArrowDropMs,
       )
     } catch {
       // interrupted
     }
+    if (signal.aborted) return
+
+    await waitWithSignal(sampleTiming.distPostArrowPauseMs, signal)
+    if (signal.aborted) return
+
+    const dotX = target?.x ?? endToX
+    const dotY = target?.y ?? distBaselineY
+    await fadeInDistDot(
+      distGroup,
+      replicateIndex,
+      sampleStat,
+      dotX,
+      dotY,
+      dotRadius,
+      sampleTiming.distDotFadeInMs,
+    )
+    if (signal.aborted) return
+
+    await fadeOpacity(distSel.select('.dist-avg-dev-line'), 0, sampleTiming.distArrowFadeOutMs)
+    distSel.select('.dist-avg-dev-line').remove()
   } else {
+    const axisLocalX = distX(sampleStat)!
+    const dotR = dotRadius - 1
+    const dotSize = dotR * 2
+    const stubTop = distBaselineY - dotSize
     const sampleLocalX = sampleX(sampleStat)!
-    const lineTop = boxTop + dotRadius
+    const lineTop = statZoneTop + STAT_GAP + TRIANGLE_SIZE
     const lineBottom = boxTop + boxAreaHeight - dotRadius
     const startTop = toAbsolute(paneLayout, PANE.SAMPLE, sampleLocalX, lineTop)
     const startBottom = toAbsolute(
@@ -385,7 +544,8 @@ export async function animateDistArrowDrop(
       sampleLocalX,
       lineBottom,
     )
-    const endPoint = toAbsolute(paneLayout, PANE.DIST, target?.x ?? distX(sampleStat)!, target?.y ?? distBaselineY)
+    const endTop = toAbsolute(paneLayout, PANE.DIST, axisLocalX, stubTop)
+    const endBottom = toAbsolute(paneLayout, PANE.DIST, axisLocalX, distBaselineY)
 
     const line = flySel
       .append('line')
@@ -400,19 +560,24 @@ export async function animateDistArrowDrop(
       startTop.y,
       startBottom.x,
       startBottom.y,
-      endPoint.x,
-      endPoint.y,
-      endPoint.y,
-      stageDuration + slideDuration,
+      endBottom.x,
+      endTop.y,
+      endBottom.y,
+      slideMs,
+      d3.easeCubicIn,
     )
-  }
+    if (signal.aborted) return
 
-  if (signal.aborted) return
-
-  flySel.selectAll('.dist-line-fly, .dist-arrow-fly').remove()
-  placeDot()
-
-  if (timingMs > 0) {
-    await delay(Math.round(timingMs * 0.1))
+    const dotX = target?.x ?? axisLocalX
+    const dotY = target?.y ?? distBaselineY
+    appendDistDotElement(
+      distGroup,
+      replicateIndex,
+      sampleStat,
+      dotX,
+      dotY,
+      dotRadius,
+    )
+    flySel.selectAll('.dist-line-fly').remove()
   }
 }

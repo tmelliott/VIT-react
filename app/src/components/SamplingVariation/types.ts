@@ -115,6 +115,24 @@ export type SampleAnimationTiming = {
   twoGroupArrowMs: number
   /** K≥3: draw deviation arrows toward the grand-mean line. */
   multiGroupArrowsMs: number
+  /** Hold completed P2 before P2→P3 (M=1 and M=5). */
+  distPreSlidePauseMs: number
+  /** Pause after arrow reaches the axis before fading in the dist dot. */
+  distPostArrowPauseMs: number
+  /** Fade in the sampling-distribution dot. */
+  distDotFadeInMs: number
+  /** Fade out transient P2→P3 arrow overlays. */
+  distArrowFadeOutMs: number
+  /** K≥3: pause with endpoint dots on deviation lines. */
+  distDevPointPauseMs: number
+  /** K≥3: fade out per-group deviation lines. */
+  distDevLineFadeOutMs: number
+  /** K≥3: avg-dev line points up at staging row. */
+  distAvgDevStageMs: number
+  /** K≥3: pause after triangle marker at the mean. */
+  distTrianglePauseMs: number
+  /** Drop the summary arrow onto the sampling-distribution axis. */
+  distArrowDropMs: number
 }
 
 export const DEFAULT_SAMPLE_ANIMATION_TIMING: SampleAnimationTiming = {
@@ -128,4 +146,13 @@ export const DEFAULT_SAMPLE_ANIMATION_TIMING: SampleAnimationTiming = {
   twoGroupPreArrowPauseMs: 500,
   twoGroupArrowMs: 500,
   multiGroupArrowsMs: 1000,
+  distPreSlidePauseMs: 1000,
+  distPostArrowPauseMs: 500,
+  distDotFadeInMs: 400,
+  distArrowFadeOutMs: 400,
+  distDevPointPauseMs: 500,
+  distDevLineFadeOutMs: 300,
+  distAvgDevStageMs: 500,
+  distTrianglePauseMs: 500,
+  distArrowDropMs: 1000,
 }

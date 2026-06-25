@@ -554,8 +554,14 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       if (!g) return
       removeReferenceStatLine(g)
       d3.select(g).selectAll('.dist-pop-stat-line').remove()
+      if (!moduleReady) {
+        return
+      }
+      if (numCatMode && nGroups === 2) {
+        drawReferenceStatLine(g, distX, 0, innerHeight)
+        return
+      }
       if (
-        !moduleReady ||
         !showPopulationStat ||
         populationStat == null ||
         !Number.isFinite(populationStat)
@@ -569,6 +575,8 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       populationStat,
       distX,
       innerHeight,
+      numCatMode,
+      nGroups,
     ])
 
     useEffect(() => {

@@ -442,19 +442,26 @@ export async function animateTwoGroupSampleDiffSummary(
     setGeometry(x0, x1, arrowY)
   }
 
-  summary
+  const label = summary
     .append('text')
     .attr('class', 'sample-diff-label text-sm fill-gray-700')
     .attr('x', (x0 + x1) / 2)
     .attr('y', diffZone.labelY)
     .attr('text-anchor', 'middle')
-    .attr('opacity', 0)
     .text(groupedDiffLabelText(stat0, stat1, statistic))
-    .transition()
-    .duration(Math.min(200, timing.twoGroupArrowMs))
-    .attr('opacity', 1)
-    .end()
-    .then(() => undefined)
+
+  const labelFadeMs = Math.min(200, timing.twoGroupArrowMs)
+  if (labelFadeMs <= 0) {
+    label.attr('opacity', 1)
+  } else {
+    label
+      .attr('opacity', 0)
+      .transition()
+      .duration(labelFadeMs)
+      .attr('opacity', 1)
+      .end()
+      .then(() => undefined)
+  }
 }
 
 export async function animateSampleDeviationSummary(
@@ -712,10 +719,15 @@ export function appendSampleDeviationMarkers(
 }
 
 export function removeSampleStatSummaries(sampleGroup: SVGGElement) {
+  clearSampleDiffSummaries(sampleGroup)
   const sel = d3.select(sampleGroup)
-  sel.selectAll('.sample-stat-summary').remove()
   sel.selectAll('.sample-stat-triangle').remove()
   sel.selectAll('.sample-stat-label').remove()
+}
+
+/** Remove only P2 diff/deviation summary overlays (arrows, drop lines, labels). */
+export function clearSampleDiffSummaries(sampleGroup: SVGGElement) {
+  d3.select(sampleGroup).selectAll('.sample-stat-summary').remove()
 }
 
 export function appendSampleStatSummary(
