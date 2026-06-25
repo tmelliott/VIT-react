@@ -4,12 +4,6 @@ set -euo pipefail
 PORT="${PORT:-8080}"
 RSERVE_HOST="${RSERVE_HOST:-/rserve}"
 
-# Normalise http(s) URLs to ws(s) for the browser WebSocket client.
-case "$RSERVE_HOST" in
-  https://*) RSERVE_HOST="wss://${RSERVE_HOST#https://}" ;;
-  http://*) RSERVE_HOST="ws://${RSERVE_HOST#http://}" ;;
-esac
-
 # Runtime config for the browser (see app/src/lib/rserveHost.ts)
 escaped_host="${RSERVE_HOST//\\/\\\\}"
 escaped_host="${escaped_host//\"/\\\"}"

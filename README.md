@@ -72,7 +72,7 @@ One service replaces a two-service setup (static app + separate Rserve).
    ```
 
 4. Generate a public domain in the Railway dashboard.
-5. Set **`RSERVE_HOST`** to your public Rserve WebSocket URL, e.g. `https://vit-react.up.railway.app/rserve` (`https://` is normalised to `wss://` at startup).
+5. Set **`RSERVE_HOST`** to your public Rserve URL, e.g. `https://vit-react.up.railway.app/rserve`.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
