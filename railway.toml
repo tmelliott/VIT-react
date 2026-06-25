@@ -1,0 +1,15 @@
+# Deploy from this directory (VIT-react/):
+#
+#   cd ws1_tools/VIT/VIT-react
+#   railway link
+#   railway up -m "VIT React"
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

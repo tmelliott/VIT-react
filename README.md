@@ -42,3 +42,48 @@ One numeric variable, mean or median. R pre-computes 1000 bootstrap samples on C
 After editing R modules in `server/`, run `bun run compile` to regenerate `app/src/rserve/vit.rserve.ts`.
 
 TypeScript: the generated schema is checked with `@ts-nocheck` (full `z.infer` OOMs tsc). App types are in `src/rserve/vit.types.ts`. Run `bun run typecheck` for a fast check; `bun run build` uses Vite only.
+
+## Deploy (single container)
+
+The React app and Rserve run together in one image: **nginx** serves the Vite build and proxies `/rserve` to Rserve on `localhost:6311`. The browser reads the Rserve URL from **`RSERVE_HOST`** (runtime, default `/rserve`) via `public/rserve-config.js`; local dev uses **`VITE_RSERVE_HOST`** in `.env` instead. All app code goes through `getRserveHost()` in `src/lib/rserveHost.ts`.
+
+### Docker (local smoke test)
+
+```bash
+cd ws1_tools/VIT/VIT-react
+docker build -t vit-react .
+docker run --rm -p 8080:8080 vit-react
+```
+
+Open http://localhost:8080 — the app should connect to Rserve without a separate server process.
+
+### Railway
+
+One service replaces a two-service setup (static app + separate Rserve).
+
+1. Set the Railway service **root directory** to `ws1_tools/VIT/VIT-react`.
+2. Builder: **Dockerfile** (see `railway.toml`).
+3. Deploy:
+
+   ```bash
+   cd ws1_tools/VIT/VIT-react
+   railway link    # once
+   railway up -m "VIT React"
+   ```
+
+4. Generate a public domain in the Railway dashboard.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PORT` | `8080` | Set by Railway automatically |
+| `RSERVE_HOST` | `/rserve` | WebSocket URL/path the browser connects to |
+
+Override `RSERVE_HOST` if Rserve is on a different path or host (e.g. `https://rserve.example.com`).
+
+### Architecture
+
+```
+Browser ──HTTPS──► nginx (:PORT)
+                     ├─ /        → static dist/
+                     └─ /rserve  → ws proxy → Rserve (:6311)
+```

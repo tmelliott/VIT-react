@@ -7,10 +7,10 @@ import { RserveConnectionProvider } from './context/RserveConnectionProvider'
 import { AppRouter } from './AppRouter'
 import { RserveStatusBar } from './components/RserveStatusBar'
 import { RserveDisconnectOverlay } from './components/RserveDisconnectOverlay'
+import { getRserveHost } from './lib/rserveHost'
 
 export function VitWidget() {
-  const rserveHost =
-    import.meta.env.VITE_RSERVE_HOST ?? 'http://127.0.0.1:6311'
+  const rserveHost = getRserveHost()
 
   const {
     app,
