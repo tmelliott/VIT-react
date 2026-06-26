@@ -1,4 +1,8 @@
 import * as d3 from 'd3'
+import {
+  statSymbol as samplingStatSymbol,
+  type SamplingStatistic,
+} from '../statistics'
 
 export const STAT_GAP = 6
 export const TRIANGLE_SIZE = 8
@@ -30,15 +34,34 @@ export function formatStatValue(value: number): string {
   return value.toFixed(3)
 }
 
-export function statSymbol(statistic: 'mean' | 'median'): string {
-  return statistic === 'median' ? 'x\u0303' : 'x\u0304'
+export function statSymbol(statistic: SamplingStatistic): string {
+  return samplingStatSymbol(statistic)
 }
 
 export function statLabelText(
   value: number,
-  statistic: 'mean' | 'median' = 'mean',
+  statistic: SamplingStatistic = 'mean',
 ): string {
   return `${statSymbol(statistic)} = ${formatStatValue(value)}`
+}
+
+/** Label only (no triangle) for quartile statistics above the boxplot. */
+export function appendStatLabelOnly(
+  parent: SVGGElement,
+  x: number,
+  statZoneTop: number,
+  value: number,
+  statistic: SamplingStatistic,
+  classPrefix = 'pop-stat',
+) {
+  const labelY = statZoneTop + STAT_GAP + STAT_LABEL_GAP + STAT_LABEL_HEIGHT - 3
+  d3.select(parent)
+    .append('text')
+    .attr('class', `${classPrefix}-label text-sm fill-gray-700`)
+    .attr('x', x)
+    .attr('y', labelY)
+    .attr('text-anchor', 'middle')
+    .text(statLabelText(value, statistic))
 }
 
 export function removeStatMarkers(parent: SVGGElement, prefix = 'pop-stat') {
@@ -77,7 +100,7 @@ export function appendStatMarker(
   options: {
     color?: string
     showLabel?: boolean
-    statistic?: 'mean' | 'median'
+    statistic?: SamplingStatistic
     classPrefix?: string
   } = {},
 ) {

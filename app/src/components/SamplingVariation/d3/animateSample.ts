@@ -13,6 +13,14 @@ import {
   type GroupBand,
 } from './groupLayout'
 import { heapYValues } from './heapLayout'
+import { distBaselineValue, usesBoxplotHighlight, type SamplingStatistic } from '../statistics'
+import {
+  drawHorizontalBoxplot,
+  archiveSampleIqrToStack,
+  clearSampleIqrStack,
+  iqrSpanPixels,
+  pushIqrLineToStack,
+} from './boxplot'
 import { animateDistArrowDrop, removeDistTransientOverlays } from './distArrowDrop'
 import {
   appendSampleStatSummary,
@@ -50,7 +58,7 @@ function avgDevCenterStat(
   nGroups: number,
   sampleIndices: number[],
   population: number[],
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   populationGrandStat: number,
 ): number {
   if (numCatMode && statKind === 'average_deviation' && nGroups >= 3) {
@@ -236,6 +244,8 @@ function appendOneNumSampleStat(
   sampleGroup: SVGGElement,
   sampleX: d3.ScaleLinear<number, number>,
   sampleStat: number,
+  sampleValues: number[],
+  statistic: SamplingStatistic,
   statZoneTop: number,
   boxTop: number,
   boxAreaHeight: number,
@@ -251,6 +261,65 @@ function appendOneNumSampleStat(
   const blueHalfHeight = verticalSpan / 4
   const blueTop = midY - blueHalfHeight
   const blueBottom = midY + blueHalfHeight
+  const opacity = current ? DIST_BARCODE_BLUE_OPACITY : PREVIOUS_STAT_OPACITY
+  const boxY = boxTop + dotRadius
+  const boxHeight = boxAreaHeight - dotRadius * 2
+
+  if (statistic === 'iqr') {
+    if (current) {
+      drawHorizontalBoxplot(
+        sampleGroup,
+        sampleValues,
+        sampleX,
+        boxY,
+        boxHeight,
+        'sample-boxplot',
+        { highlight: 'iqr' },
+      )
+      d3.select(sampleGroup).select('.sample-iqr-stack').lower()
+      d3.select(sampleGroup).select('.sample-boxplot').raise()
+    } else {
+      const span = iqrSpanPixels(sampleValues, sampleX)
+      if (span) {
+        pushIqrLineToStack(
+          sampleGroup,
+          span.xQ1,
+          span.xQ3,
+          boxY,
+          boxHeight,
+          replicateIndex,
+        )
+      }
+    }
+    return
+  }
+
+  if (usesBoxplotHighlight(statistic)) {
+    if (current) {
+      drawHorizontalBoxplot(
+        sampleGroup,
+        sampleValues,
+        sampleX,
+        boxY,
+        boxHeight,
+        'sample-boxplot',
+        { highlight: statistic },
+      )
+    }
+    d3.select(sampleGroup)
+      .append('line')
+      .attr('class', 'sample-stat-barcode-vline')
+      .attr('data-index', replicateIndex)
+      .attr('x1', x)
+      .attr('x2', x)
+      .attr('y1', blueTop)
+      .attr('y2', blueBottom)
+      .attr('stroke', DIST_BARCODE_BLUE)
+      .attr('stroke-width', 3)
+      .attr('stroke-linecap', 'round')
+      .attr('opacity', opacity)
+    return
+  }
 
   d3.select(sampleGroup)
     .append('line')
@@ -263,7 +332,7 @@ function appendOneNumSampleStat(
     .attr('stroke', DIST_BARCODE_BLUE)
     .attr('stroke-width', 3)
     .attr('stroke-linecap', 'round')
-    .attr('opacity', current ? DIST_BARCODE_BLUE_OPACITY : PREVIOUS_STAT_OPACITY)
+    .attr('opacity', opacity)
 
   if (current) {
     d3.select(sampleGroup)
@@ -281,6 +350,7 @@ function appendOneNumSampleStat(
     appendStatMarker(sampleGroup, x, statZoneTop, sampleStat, {
       showLabel: false,
       classPrefix: 'sample-stat',
+      statistic: 'mean',
     })
   }
 }
@@ -319,7 +389,7 @@ function appendGroupedSampleStatLines(
   bands: GroupBand[],
   replicateIndex: number,
   nGroups: number,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   current = true,
 ) {
   if (nGroups >= 3) {
@@ -372,7 +442,7 @@ function appendGroupedSampleStats(
   groupStats: number[],
   bands: GroupBand[],
   populationGrandStat: number,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   statKind: StatKind,
   nGroups: number,
   replicateIndex: number,
@@ -501,11 +571,13 @@ export type SampleBatchAnimContext = {
   numCatMode: boolean
   groupBands: GroupBand[]
   nGroups: number
-  statistic: 'mean' | 'median'
+  statistic: SamplingStatistic
   statKind: StatKind
   paneInnerHeight: number
   populationGrandStat: number
   populationStat: number
+  /** Clear P2/P3 layers before this batch (first batch of a run only). */
+  resetPane: boolean
 }
 
 export async function animateSampleBatch(
@@ -539,34 +611,29 @@ export async function animateSampleBatch(
     statKind,
     paneInnerHeight,
     populationGrandStat,
+    resetPane,
   } = ctx
 
   if (signal.aborted || reps.length === 0) return
 
-  resetSamplePane(sampleGroup)
+  const boxY = boxTop + dotRadius
+  const boxHeight = boxAreaHeight - dotRadius * 2
+  const lastRep = reps[reps.length - 1]!
+  const priorReps = reps.slice(0, -1)
+
+  if (resetPane) {
+    resetSamplePane(sampleGroup)
+    if (includeDist) {
+      d3.select(distGroup).selectAll('.dist-dot').remove()
+      removeDistTransientOverlays(distGroup)
+    }
+  } else {
+    clearSampleTransient(sampleGroup)
+    archiveCurrentSampleStats(sampleGroup, { statistic, boxY, boxHeight })
+  }
   clearFlyLayer(flyGroup)
 
-  drawSampleDots(
-    sampleGroup,
-    showcaseSampleIndices,
-    population,
-    populationGroup,
-    sampleX,
-    baselineY,
-    dotRadius,
-    numCatMode,
-    groupBands,
-  )
-  if (numCatMode) {
-    syncSampleBandLabels(
-      sampleGroup,
-      groupBands,
-      showcaseSampleIndices,
-      populationGroup,
-    )
-  }
-
-  for (const rep of reps) {
+  for (const rep of priorReps) {
     if (numCatMode) {
       const groupStats = sampleGroupStats(
         rep.sampleIndices,
@@ -603,6 +670,8 @@ export async function animateSampleBatch(
         sampleGroup,
         sampleX,
         rep.sampleStat,
+        rep.sampleIndices.map((i) => population[i]!),
+        statistic,
         statZoneTop,
         boxTop,
         boxAreaHeight,
@@ -611,6 +680,73 @@ export async function animateSampleBatch(
         false,
       )
     }
+  }
+
+  if (numCatMode) {
+    const groupStats = sampleGroupStats(
+      lastRep.sampleIndices,
+      population,
+      populationGroup,
+      nGroups,
+      statistic,
+    )
+    const deviationCenter = avgDevCenterStat(
+      numCatMode,
+      statKind,
+      nGroups,
+      lastRep.sampleIndices,
+      population,
+      statistic,
+      populationGrandStat,
+    )
+    appendGroupedSampleStats(
+      sampleGroup,
+      sampleX,
+      groupStats,
+      groupBands,
+      deviationCenter,
+      statistic,
+      statKind,
+      nGroups,
+      lastRep.replicateIndex,
+      paneInnerHeight,
+      false,
+      true,
+    )
+  } else {
+    appendOneNumSampleStat(
+      sampleGroup,
+      sampleX,
+      lastRep.sampleStat,
+      lastRep.sampleIndices.map((i) => population[i]!),
+      statistic,
+      statZoneTop,
+      boxTop,
+      boxAreaHeight,
+      dotRadius,
+      lastRep.replicateIndex,
+      true,
+    )
+  }
+
+  drawSampleDots(
+    sampleGroup,
+    lastRep.sampleIndices,
+    population,
+    populationGroup,
+    sampleX,
+    baselineY,
+    dotRadius,
+    numCatMode,
+    groupBands,
+  )
+  if (numCatMode) {
+    syncSampleBandLabels(
+      sampleGroup,
+      groupBands,
+      lastRep.sampleIndices,
+      populationGroup,
+    )
   }
 
   if (includeDist) {
@@ -632,29 +768,6 @@ export async function animateSampleBatch(
         target.y,
         dotRadius,
       )
-    }
-
-    const lastRep = reps[reps.length - 1]
-    if (lastRep) {
-      drawSampleDots(
-        sampleGroup,
-        lastRep.sampleIndices,
-        population,
-        populationGroup,
-        sampleX,
-        baselineY,
-        dotRadius,
-        numCatMode,
-        groupBands,
-      )
-      if (numCatMode) {
-        syncSampleBandLabels(
-          sampleGroup,
-          groupBands,
-          lastRep.sampleIndices,
-          populationGroup,
-        )
-      }
     }
   }
 
@@ -693,7 +806,7 @@ export type SampleAnimContext = {
   numCatMode: boolean
   groupBands: GroupBand[]
   nGroups: number
-  statistic: 'mean' | 'median'
+  statistic: SamplingStatistic
   statKind: StatKind
   paneInnerHeight: number
   populationGrandStat: number
@@ -743,7 +856,11 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
 
   if (signal.aborted) return
 
-  resetSamplePane(sampleGroup)
+  const boxY = boxTop + dotRadius
+  const boxHeight = boxAreaHeight - dotRadius * 2
+
+  clearSampleTransient(sampleGroup)
+  archiveCurrentSampleStats(sampleGroup, { statistic, boxY, boxHeight })
   clearFlyLayer(flyGroup)
 
   const radius = dotRadius
@@ -802,6 +919,8 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         sampleGroup,
         sampleX,
         sampleStat,
+        sampleValues,
+        statistic,
         statZoneTop,
         boxTop,
         boxAreaHeight,
@@ -828,6 +947,8 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         sampleGroup,
         sampleX,
         sampleStat,
+        sampleValues,
+        statistic,
         statZoneTop,
         boxTop,
         boxAreaHeight,
@@ -844,7 +965,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
     const [rangeMin, rangeMax] = sampleX.range()
     const innerWidth = Math.abs(rangeMax - rangeMin)
 
-    if (statKind === 'difference' || nGroups === 2) {
+    if (statKind === 'difference' || statKind === 'ratio' || nGroups === 2) {
       await animateTwoGroupSampleDiffSummary(
         sampleGroup,
         sampleX,
@@ -852,6 +973,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         groupBands,
         diffZone,
         statistic,
+        statKind,
         replicateIndex,
         sampleTiming,
         wait,
@@ -1041,7 +1163,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
       statistic,
       true,
     )
-    if (showP2CatSummary && (statKind === 'difference' || nGroups === 2)) {
+    if (showP2CatSummary && (statKind === 'difference' || statKind === 'ratio' || nGroups === 2)) {
       await animateTwoGroupSampleDiffSummary(
         sampleGroup,
         sampleX,
@@ -1049,6 +1171,7 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
         groupBands,
         twoGroupDiffZone(paneInnerHeight),
         statistic,
+        statKind,
         replicateIndex,
         INSTANT_TWO_GROUP_SUMMARY_TIMING,
         () => Promise.resolve(),
@@ -1075,6 +1198,8 @@ export async function animateOneSample(ctx: SampleAnimContext): Promise<void> {
       sampleGroup,
       sampleX,
       sampleStat,
+      sampleValues,
+      statistic,
       statZoneTop,
       boxTop,
       boxAreaHeight,
@@ -1165,7 +1290,7 @@ export type DistAnimContext = {
   groupStats: number[]
   paneInnerHeight: number
   groupBands: GroupBand[]
-  statistic: 'mean' | 'median'
+  statistic: SamplingStatistic
   populationGrandStat: number
   populationStat: number
   statZoneTop: number
@@ -1186,6 +1311,8 @@ export function resetSamplePane(sampleGroup: SVGGElement): void {
   sel.selectAll('.sample-stat-summary').remove()
   sel.selectAll('.sample-stat-triangle').remove()
   sel.selectAll('.sample-stat-label').remove()
+  sel.selectAll('.sample-boxplot').remove()
+  clearSampleIqrStack(sampleGroup)
   sel.selectAll('.dist-marker').remove()
 }
 
@@ -1197,6 +1324,36 @@ export function clearSampleTransient(sampleGroup: SVGGElement) {
   d3.select(sampleGroup).selectAll('.sample-dot').remove()
   d3.select(sampleGroup).selectAll('.sample-band-label').remove()
   d3.select(sampleGroup).selectAll('.dist-marker').remove()
+}
+
+/** Fade stored P2 stats and remove markers that belong only to the active replicate. */
+export function archiveCurrentSampleStats(
+  sampleGroup: SVGGElement,
+  options?: { statistic?: SamplingStatistic; boxY?: number; boxHeight?: number },
+) {
+  const sel = d3.select(sampleGroup)
+  sel
+    .selectAll('.sample-stat-barcode-vline')
+    .attr('opacity', PREVIOUS_STAT_OPACITY)
+  if (
+    options?.statistic === 'iqr' &&
+    options.boxY != null &&
+    options.boxHeight != null
+  ) {
+    archiveSampleIqrToStack(sampleGroup, options.boxY, options.boxHeight)
+  } else {
+    sel.selectAll('.sample-boxplot').remove()
+  }
+  sel
+    .selectAll('.sample-stat-line[data-group]')
+    .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
+  sel.selectAll('.sample-stat-line:not([data-group])').remove()
+  sel
+    .selectAll('.sample-stat-vline')
+    .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
+  sel.selectAll('.sample-stat-summary').attr('opacity', PREVIOUS_STAT_OPACITY)
+  sel.selectAll('.sample-stat-triangle').remove()
+  sel.selectAll('.sample-stat-label').remove()
 }
 
 export function clearHighlights(popGroup: SVGGElement, _numCatMode = false) {

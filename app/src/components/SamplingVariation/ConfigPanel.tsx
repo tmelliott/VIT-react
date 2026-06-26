@@ -1,3 +1,9 @@
+import {
+  availableStatistics,
+  parseSamplingStatistic,
+  statOptionLabel,
+} from './statistics'
+
 type ConfigPanelProps = {
   allVariables: string[]
   xvar: string
@@ -6,6 +12,7 @@ type ConfigPanelProps = {
   statistic: string
   statKindLabel: string
   numCatMode: boolean
+  nGroups: number
   status: string
   errorMessage: string
   maxSampleSize: number
@@ -25,6 +32,7 @@ export function ConfigPanel({
   statistic,
   statKindLabel,
   numCatMode,
+  nGroups,
   status,
   errorMessage,
   maxSampleSize,
@@ -38,6 +46,10 @@ export function ConfigPanel({
   const computing = status === 'computing'
   const minSampleSize = numCatMode ? 2 : 1
   const secondaryOptions = allVariables.filter((name) => name !== xvar)
+  const statisticOptions = availableStatistics(numCatMode, nGroups)
+  const selectedStatistic = statisticOptions.includes(parseSamplingStatistic(statistic))
+    ? parseSamplingStatistic(statistic)
+    : 'mean'
 
   return (
     <div className="flex flex-col gap-2 p-4 bg-gray-50 rounded-md border border-gray-200">
@@ -97,12 +109,15 @@ export function ConfigPanel({
           Statistic
           <select
             className="border border-gray-300 rounded px-2 py-1 bg-white"
-            value={statistic}
+            value={selectedStatistic}
             disabled={computing}
             onChange={(e) => onStatisticChange(e.target.value)}
           >
-            <option value="mean">Mean (x̄)</option>
-            <option value="median">Median (x̃)</option>
+            {statisticOptions.map((option) => (
+              <option key={option} value={option}>
+                {statOptionLabel(option)}
+              </option>
+            ))}
           </select>
         </label>
 

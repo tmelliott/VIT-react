@@ -3,17 +3,25 @@ NUM_REPS <- 1000L
 #' Sample index rows kept for client animation (stats still computed for all reps).
 ANIM_POOL_SIZE <- 100L
 
-sample_statistic <- function(x, statistic = c("mean", "median")) {
+sample_statistic <- function(
+    x,
+    statistic = c("mean", "median", "lq", "uq", "iqr")) {
     statistic <- match.arg(statistic)
     x <- x[is.finite(x)]
     if (length(x) == 0L) {
         return(NA_real_)
     }
-    if (statistic == "mean") {
-        mean(x)
-    } else {
-        stats::median(x)
-    }
+    switch(
+        statistic,
+        mean = mean(x),
+        median = stats::median(x),
+        lq = as.numeric(stats::quantile(x, 0.25)),
+        uq = as.numeric(stats::quantile(x, 0.75)),
+        iqr = {
+            qs <- stats::quantile(x, c(0.25, 0.75))
+            qs[[2L]] - qs[[1L]]
+        }
+    )
 }
 
 scale_domain <- function(x, pad = 0.05) {
@@ -31,7 +39,7 @@ scale_domain <- function(x, pad = 0.05) {
 compute_one_num_sampling <- function(
     population,
     sample_size,
-    statistic = c("mean", "median"),
+    statistic = c("mean", "median", "lq", "uq", "iqr"),
     num_reps = NUM_REPS,
     progress_callback = NULL) {
     statistic <- match.arg(statistic)
@@ -70,7 +78,15 @@ compute_one_num_sampling <- function(
         }
     }
 
-    dist_domain <- pop_domain
+    dist_domain <- if (statistic == "iqr") {
+        span <- pop_domain[2L] - pop_domain[1L]
+        if (!is.finite(span) || span <= 0) {
+            span <- 1
+        }
+        c(0, span)
+    } else {
+        pop_domain
+    }
 
     list(
         population = as.numeric(population),

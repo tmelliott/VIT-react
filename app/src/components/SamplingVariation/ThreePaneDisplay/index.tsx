@@ -13,9 +13,10 @@ import {
   POP_DOT_STROKE_OPACITY,
   POP_DOT_STROKE_WIDTH,
 } from '../d3/paneStyle'
-import { drawHorizontalBoxplot } from '../d3/boxplot'
+import { drawHorizontalBoxplot, boxplotHighlightLabelX } from '../d3/boxplot'
 import { drawBottomAxis } from '../d3/drawPaneAxis'
 import {
+  appendStatLabelOnly,
   appendStatMarker,
   removeStatMarkers,
 } from '../d3/statMarker'
@@ -53,6 +54,7 @@ import {
 import { PaneHelpModal } from '../PaneHelpModal'
 import { paneHelpContent } from '../paneHelpContent'
 import type { StatKind } from '../types'
+import { distBaselineValue, parseSamplingStatistic, usesBoxplotHighlight, type SamplingStatistic } from '../statistics'
 
 export type ThreePaneHandle = {
   popGroup: SVGGElement
@@ -78,7 +80,7 @@ export type ThreePaneHandle = {
   sampleGroupBands: GroupBand[]
   populationGroup: number[]
   nGroups: number
-  statistic: 'mean' | 'median'
+  statistic: SamplingStatistic
   statKind: string
   grandMean: number
 }
@@ -168,7 +170,7 @@ function drawPopulationGrouped(
   groupStats: number[],
   grandMean: number,
   statKind: string,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   nGroups: number,
   popX: d3.ScaleLinear<number, number>,
   popY: number[],
@@ -225,7 +227,7 @@ function drawPopulationGrouped(
 
       if (
         nGroups === 2 &&
-        (statKind === 'difference' || groupStats.length === 2) &&
+        (statKind === 'difference' || statKind === 'ratio' || groupStats.length === 2) &&
         groupStats.length >= 2
       ) {
         appendTwoGroupPopulationDiffDisplay(
@@ -235,6 +237,7 @@ function drawPopulationGrouped(
           bands,
           twoGroupDiffZone(innerHeight),
           statistic,
+          statKind as StatKind,
         )
       }
     }
@@ -255,7 +258,7 @@ function drawPopulationOneNum(
   boxTop: number,
   boxAreaHeight: number,
   baselineY: number,
-  stat: 'mean' | 'median',
+  stat: SamplingStatistic,
 ) {
   removeGroupedPopulationOverlays(g)
   const sel = d3
@@ -276,22 +279,41 @@ function drawPopulationOneNum(
 
   removeStatMarkers(g)
   d3.select(g).selectAll('[class^="pop-boxplot"]').remove()
-  if (showPopulationStat && populationStat != null && Number.isFinite(populationStat)) {
-    appendStatMarker(g, popX(populationStat)!, statZoneTop, populationStat, {
-      showLabel: true,
-      statistic: stat,
-    })
-  }
+  const boxHighlightMode = usesBoxplotHighlight(stat)
+  const boxY = boxTop + DOT_RADIUS
+  const boxHeight = boxAreaHeight - DOT_RADIUS * 2
 
-  if (showBoxplot) {
-    drawHorizontalBoxplot(
-      g,
-      population,
-      popX,
-      boxTop + DOT_RADIUS,
-      boxAreaHeight - DOT_RADIUS * 2,
-      'pop-boxplot',
-    )
+  if (showPopulationStat && populationStat != null && Number.isFinite(populationStat)) {
+    if (boxHighlightMode) {
+      const summary = drawHorizontalBoxplot(
+        g,
+        population,
+        popX,
+        boxY,
+        boxHeight,
+        'pop-boxplot',
+        { highlight: stat },
+      )
+      if (summary) {
+        appendStatLabelOnly(
+          g,
+          boxplotHighlightLabelX(summary, stat, popX),
+          statZoneTop,
+          populationStat,
+          stat,
+        )
+      }
+    } else {
+      appendStatMarker(g, popX(populationStat)!, statZoneTop, populationStat, {
+        showLabel: true,
+        statistic: stat,
+      })
+      if (showBoxplot) {
+        drawHorizontalBoxplot(g, population, popX, boxY, boxHeight, 'pop-boxplot')
+      }
+    }
+  } else if (showBoxplot) {
+    drawHorizontalBoxplot(g, population, popX, boxY, boxHeight, 'pop-boxplot')
   }
 }
 
@@ -324,22 +346,29 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     const axisRefs = useRef<(SVGGElement | null)[]>([null, null, null])
     const [size, setSize] = useState({ width: 720, height: 540 })
 
-    const stat = statistic === 'median' ? 'median' : 'mean'
+    const stat = parseSamplingStatistic(statistic)
     const numCatMode =
       variableSupport === 'num_cat' && nGroups >= 2 && groupLevels.length >= 2
     const showData =
       variableSupport === 'one_num' || variableSupport === 'num_cat'
     const popDomain = effectivePopDomain(population, scales?.pop)
     const rawDistDomain = effectiveDistDomain([], scales?.dist)
+    const oneNumIqrDist = variableSupport === 'one_num' && stat === 'iqr'
     const popAlignedDist =
       numCatMode && statKind === 'average_deviation' && nGroups >= 3
     const distDomainTwoGroup =
-      numCatMode && nGroups === 2 && populationStat != null && Number.isFinite(populationStat)
+      numCatMode &&
+      nGroups === 2 &&
+      stat !== 'iqr' &&
+      populationStat != null &&
+      Number.isFinite(populationStat)
         ? distDomainCenteredOn(popDomain, populationStat)
         : null
-    const distDomain = popAlignedDist
+    const distDomain = oneNumIqrDist
       ? distDomainAlignedToPop(popDomain)
-      : distDomainTwoGroup ?? rawDistDomain
+      : popAlignedDist
+        ? distDomainAlignedToPop(popDomain)
+        : distDomainTwoGroup ?? rawDistDomain
 
     useEffect(() => {
       const el = containerRef.current
@@ -368,12 +397,14 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     } = usePaneLayout(size.width, size.height, !numCatMode)
     const domains = domainsFromState(scales)
     const activeDistDomain =
-      variableSupport === 'one_num'
-        ? popDomain
-        : popAlignedDist
-          ? distDomainAlignedToPop(popDomain)
-          : distDomainTwoGroup ??
-            (moduleReady ? domains.dist : distDomain)
+      oneNumIqrDist
+        ? distDomainAlignedToPop(popDomain)
+        : variableSupport === 'one_num'
+          ? popDomain
+          : popAlignedDist
+            ? distDomainAlignedToPop(popDomain)
+            : distDomainTwoGroup ??
+              (moduleReady ? domains.dist : distDomain)
     const { popX, sampleX, distX } = useSamplingScales(
       popDomain,
       activeDistDomain,
@@ -566,7 +597,13 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
         return
       }
       if (numCatMode && nGroups === 2) {
-        drawDistTwoGroupReferenceLines(g, distX, populationStat ?? NaN, innerHeight)
+        drawDistTwoGroupReferenceLines(
+          g,
+          distX,
+          populationStat ?? NaN,
+          innerHeight,
+          distBaselineValue(statKind as StatKind),
+        )
         return
       }
       if (
@@ -585,6 +622,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       innerHeight,
       numCatMode,
       nGroups,
+      statKind,
     ])
 
     useEffect(() => {

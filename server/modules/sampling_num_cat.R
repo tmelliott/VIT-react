@@ -52,10 +52,21 @@ encode_groups <- function(y, levels) {
     match(y, levels) - 1L
 }
 
+two_group_summary_stat <- function(gstats, statistic) {
+    if (statistic == "iqr") {
+        if (gstats[[1L]] == 0) {
+            return(NA_real_)
+        }
+        gstats[[2L]] / gstats[[1L]]
+    } else {
+        gstats[[2L]] - gstats[[1L]]
+    }
+}
+
 population_summary_stat <- function(x, y, levels, statistic, n_groups) {
     if (n_groups == 2L) {
         gstats <- group_stats_for_levels(x, y, levels, statistic)
-        gstats[[2L]] - gstats[[1L]]
+        two_group_summary_stat(gstats, statistic)
     } else {
         gstat <- sample_statistic(x, statistic)
         devs <- vapply(levels, function(g) {
@@ -74,7 +85,7 @@ sample_replicate_stat <- function(
     population_grand = NULL) {
     if (n_groups == 2L) {
         gstats <- group_stats_for_levels(x, y, levels, statistic)
-        gstats[[2L]] - gstats[[1L]]
+        two_group_summary_stat(gstats, statistic)
     } else {
         ref_stat <- if (!is.null(population_grand)) {
             population_grand
@@ -101,7 +112,7 @@ compute_num_cat_sampling <- function(
     x,
     y,
     sample_size,
-    statistic = c("mean", "median"),
+    statistic = c("mean", "median", "lq", "uq", "iqr"),
     num_reps = NUM_REPS,
     progress_callback = NULL) {
     statistic <- match.arg(statistic)
@@ -130,7 +141,17 @@ compute_num_cat_sampling <- function(
         statistic,
         n_groups
     )
-    stat_kind <- if (n_groups == 2L) "difference" else "average_deviation"
+    if (n_groups >= 3L && statistic %in% c("lq", "uq", "iqr")) {
+        stop(
+            "Quartile statistics are only supported for one numeric or two-group layouts",
+            call. = FALSE
+        )
+    }
+    stat_kind <- if (n_groups == 2L) {
+        if (statistic == "iqr") "ratio" else "difference"
+    } else {
+        "average_deviation"
+    }
 
     pop_domain <- scale_domain(x)
     sample_stats <- numeric(num_reps)
@@ -218,7 +239,7 @@ preview_num_cat <- function(widget) {
         return(NULL)
     }
     stat <- widget$statistic
-    if (!stat %in% c("mean", "median")) {
+    if (!stat %in% c("mean", "median", "lq", "uq", "iqr")) {
         stat <- "mean"
     }
     levels <- order_group_levels(dat$x, dat$y, stat)

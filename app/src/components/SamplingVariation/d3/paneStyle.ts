@@ -17,6 +17,8 @@ export const DIST_POPULATION_REF_WIDTH = 2
 export const DIST_BARCODE_VLINE_COLOR = '#111827'
 export const DIST_BARCODE_BLUE = '#2563eb'
 export const DIST_BARCODE_BLUE_OPACITY = 0.55
+/** P2 IQR history: stack pitch equals stroke width (no gap between lines). */
+export const IQR_STACK_LINE_HEIGHT = 1
 
 /** Vertical staging row for K≥3 distribution animation (from plot top). */
 export const DIST_STAGE_Y = 22

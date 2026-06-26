@@ -11,16 +11,17 @@ import {
   type TwoGroupDiffZone,
 } from './groupLayout'
 import type { SampleAnimationTiming } from '../types'
+import { twoGroupSummaryLabel, type SamplingStatistic } from '../statistics'
 import {
   PREVIOUS_STAT_OPACITY,
 } from './paneStyle'
 
-export type StatKind = 'difference' | 'average_deviation' | ''
+export type StatKind = 'difference' | 'ratio' | 'average_deviation' | ''
 
 export function sampleGrandStat(
   sampleIndices: number[],
   population: number[],
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
 ): number {
   const values = sampleIndices.map((i) => population[i]!)
   return populationGrandStat(values, statistic)
@@ -145,10 +146,11 @@ export function appendPopulationDeviationMarkers(
 export function groupedDiffLabelText(
   stat0: number,
   stat1: number,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
+  statKind: StatKind = 'difference',
 ): string {
-  const sym = statSymbol(statistic)
-  return `${sym}\u2082 \u2212 ${sym}\u2081 = ${formatStatValue(stat1 - stat0)}`
+  const kind = statKind === 'ratio' ? 'ratio' : 'difference'
+  return twoGroupSummaryLabel(stat0, stat1, statistic, kind)
 }
 
 /** Label for K≥3: mean absolute deviation from the overall population statistic. */
@@ -189,7 +191,8 @@ export function appendTwoGroupPopulationDiffDisplay(
   groupStats: number[],
   bands: GroupBand[],
   diffZone: TwoGroupDiffZone,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
+  statKind: StatKind = 'difference',
 ) {
   if (groupStats.length < 2 || bands.length < 2) return
   const stat0 = groupStats[0]!
@@ -226,7 +229,7 @@ export function appendTwoGroupPopulationDiffDisplay(
     .attr('x', (x0 + x1) / 2)
     .attr('y', diffZone.labelY)
     .attr('text-anchor', 'middle')
-    .text(groupedDiffLabelText(stat0, stat1, statistic))
+    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind))
 }
 
 export function appendPopulationDifferenceArrow(
@@ -267,7 +270,7 @@ export function appendTwoGroupBandSampleStat(
   xScale: d3.ScaleLinear<number, number>,
   stat: number,
   band: GroupBand,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   replicateIndex: number,
   current = true,
 ) {
@@ -304,7 +307,7 @@ export function appendTwoGroupSampleMeanMarkers(
   xScale: d3.ScaleLinear<number, number>,
   groupStats: number[],
   bands: GroupBand[],
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   replicateIndex: number,
 ) {
   if (groupStats.length < 2 || bands.length < 2) return
@@ -332,7 +335,8 @@ export async function animateTwoGroupSampleDiffSummary(
   groupStats: number[],
   bands: GroupBand[],
   diffZone: TwoGroupDiffZone,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
+  statKind: StatKind,
   replicateIndex: number,
   timing: Pick<
     SampleAnimationTiming,
@@ -448,7 +452,7 @@ export async function animateTwoGroupSampleDiffSummary(
     .attr('x', (x0 + x1) / 2)
     .attr('y', diffZone.labelY)
     .attr('text-anchor', 'middle')
-    .text(groupedDiffLabelText(stat0, stat1, statistic))
+    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind))
 
   const labelFadeMs = Math.min(200, timing.twoGroupArrowMs)
   if (labelFadeMs <= 0) {
@@ -590,8 +594,9 @@ export function appendTwoGroupSampleDiffDisplay(
   groupStats: number[],
   bands: GroupBand[],
   diffZone: TwoGroupDiffZone,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   replicateIndex: number,
+  statKind: StatKind = 'difference',
 ) {
   if (groupStats.length < 2 || bands.length < 2) return
   const stat0 = groupStats[0]!
@@ -637,7 +642,7 @@ export function appendTwoGroupSampleDiffDisplay(
     .attr('x', (x0 + x1) / 2)
     .attr('y', diffZone.labelY)
     .attr('text-anchor', 'middle')
-    .text(groupedDiffLabelText(stat0, stat1, statistic))
+    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind))
 }
 
 /** K≥3 sample deviation markers matching P1 styling (transient overlay). */
@@ -736,14 +741,14 @@ export function appendSampleStatSummary(
   groupStats: number[],
   bands: GroupBand[],
   populationGrandStat: number,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
   statKind: StatKind,
   nGroups: number,
   replicateIndex: number,
   innerHeight: number,
   diffZone: TwoGroupDiffZone,
 ) {
-  if (statKind === 'difference' || nGroups === 2) {
+  if (statKind === 'difference' || statKind === 'ratio' || nGroups === 2) {
     appendTwoGroupSampleDiffDisplay(
       sampleGroup,
       sampleX,
@@ -752,6 +757,7 @@ export function appendSampleStatSummary(
       diffZone,
       statistic,
       replicateIndex,
+      statKind,
     )
     return
   }

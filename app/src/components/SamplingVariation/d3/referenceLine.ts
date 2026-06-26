@@ -103,20 +103,21 @@ export function drawDistPopulationReferenceLine(
   })
 }
 
-/** P3 k=2: solid line at zero, emphasized dashed line at the population difference. */
+/** P3 k=2: solid baseline line (0 for differences, 1 for ratios) and population summary. */
 export function drawDistTwoGroupReferenceLines(
   parent: SVGGElement,
   xScale: d3.ScaleLinear<number, number>,
-  populationDiff: number,
+  populationSummary: number,
   innerHeight: number,
+  baseline = 0,
 ) {
-  drawReferenceStatLine(parent, xScale, 0, innerHeight, 4, undefined, {
+  drawReferenceStatLine(parent, xScale, baseline, innerHeight, 4, undefined, {
     className: 'dist-zero-line',
     dashed: false,
     halo: true,
   })
-  if (Number.isFinite(populationDiff)) {
-    drawDistPopulationReferenceLine(parent, xScale, populationDiff, innerHeight)
+  if (Number.isFinite(populationSummary)) {
+    drawDistPopulationReferenceLine(parent, xScale, populationSummary, innerHeight)
   }
 }
 

@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, type ComponentRef } from 'react'
+import { useRef, useState, useMemo, useEffect, type ComponentRef } from 'react'
 import { useWidget } from '@tmelliott/react-rserve'
 import type {
   SamplingVariationCtor,
@@ -26,6 +26,7 @@ import {
   averageDeviationFromGroups,
   populationGrandStat,
 } from './d3/groupLayout'
+import { availableStatistics, parseSamplingStatistic } from './statistics'
 
 function useInferenceActive(moduleStatus: string, configEpoch: number) {
   const confirmedEpochRef = useRef<number | null>(null)
@@ -85,7 +86,7 @@ function SamplingVariationView({
   const groupLevels = toStringArray(state.group_levels)
   const groupStats = toNumberArray(state.group_stats)
   const nGroups = state.n_groups ?? 0
-  const statKind = (state.stat_kind ?? '') as '' | 'difference' | 'average_deviation'
+  const statKind = (state.stat_kind ?? '') as '' | 'difference' | 'ratio' | 'average_deviation'
   const variableSupport = getVariableSupport(
     xvar,
     yvar,
@@ -93,7 +94,12 @@ function SamplingVariationView({
     groupVariables,
   )
   const numCatMode = variableSupport === 'num_cat' && isNumCatMode(nGroups, yvar)
-  const stat = statistic === 'median' ? 'median' : 'mean'
+  const stat = parseSamplingStatistic(statistic)
+  const allowedStatistics = availableStatistics(numCatMode, nGroups)
+  useEffect(() => {
+    if (allowedStatistics.includes(stat)) return
+    void set?.({ statistic: 'mean' })
+  }, [allowedStatistics, stat, set])
   const showPopulationPreview =
     (variableSupport === 'one_num' || variableSupport === 'num_cat') &&
     population.length > 0
@@ -133,6 +139,7 @@ function SamplingVariationView({
     xvar !== '' &&
     sampleSize >= minSampleSize &&
     sampleSize <= maxSampleSize &&
+    allowedStatistics.includes(stat) &&
     moduleStatus !== 'computing'
 
   const handleXvarChange = (value: string) => {
@@ -172,8 +179,9 @@ function SamplingVariationView({
             yvar={yvar}
             sampleSize={sampleSize}
             statistic={statistic}
-            statKindLabel={statKindLabel(statKind, nGroups)}
+            statKindLabel={statKindLabel(statKind, nGroups, statistic)}
             numCatMode={numCatMode}
+            nGroups={nGroups}
             status={moduleStatus}
             errorMessage={errorMessage}
             maxSampleSize={maxSampleSize}

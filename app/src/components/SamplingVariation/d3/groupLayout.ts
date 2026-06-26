@@ -1,4 +1,5 @@
 import * as d3 from 'd3'
+import { computeStatistic, type SamplingStatistic } from '../statistics'
 import { BOX_AREA_FRACTION, paneRegions } from '../hooks/useSamplingScales'
 import { DOT_RADIUS, heapYFromXPositions, plotRangeMin } from './heapLayout'
 import { TWO_GROUP_DIFF_ZONE_HEIGHT, SAMPLE_MEAN_STRIP_HEIGHT } from './statMarker'
@@ -184,11 +185,9 @@ export function twoGroupDiffZone(innerHeight: number): TwoGroupDiffZone {
 
 export function populationGrandStat(
   population: number[],
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
 ): number {
-  if (population.length === 0) return 0
-  if (statistic === 'median') return d3.median(population) ?? 0
-  return d3.mean(population) ?? 0
+  return computeStatistic(population, statistic)
 }
 
 /** Mean absolute deviation over groups present in the sample only. */
@@ -252,17 +251,15 @@ export function groupStatsFromPopulation(
   population: number[],
   populationGroup: number[],
   nGroups: number,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
 ): number[] {
   const stats = new Array<number>(nGroups).fill(0)
   for (let g = 0; g < nGroups; g++) {
     const values = population.filter((_, i) => populationGroup[i] === g)
     if (values.length === 0) {
       stats[g] = 0
-    } else if (statistic === 'median') {
-      stats[g] = d3.median(values) ?? 0
     } else {
-      stats[g] = d3.mean(values) ?? 0
+      stats[g] = computeStatistic(values, statistic)
     }
   }
   return stats
@@ -273,7 +270,7 @@ export function sampleGroupStats(
   population: number[],
   populationGroup: number[],
   nGroups: number,
-  statistic: 'mean' | 'median',
+  statistic: SamplingStatistic,
 ): number[] {
   const buckets: number[][] = Array.from({ length: nGroups }, () => [])
   for (const i of sampleIndices) {
@@ -283,8 +280,7 @@ export function sampleGroupStats(
   }
   return buckets.map((values) => {
     if (values.length === 0) return NaN
-    if (statistic === 'median') return d3.median(values) ?? NaN
-    return d3.mean(values) ?? NaN
+    return computeStatistic(values, statistic)
   })
 }
 

@@ -27,6 +27,7 @@ import {
   type MValue,
   type SampleAnimationTiming,
 } from '../types'
+import { parseSamplingStatistic } from '../statistics'
 import type { SamplingVariationState } from '../../rserve/vit.types'
 import { ensureDistLayout, useDistLayout } from './useDistLayout'
 import type { ThreePaneHandle } from '../ThreePaneDisplay'
@@ -83,7 +84,7 @@ export function useAnimationController(
       const sampleStats = toNumberArray(state.sample_stats)
       const sampleSize = state.sample_size ?? 20
       const indices = state.sample_indices
-      const statistic = state.statistic === 'median' ? 'median' : 'mean'
+      const statistic = parseSamplingStatistic(state.statistic)
       if (!indices || sampleStats.length === 0) return
 
       const distLayout = ensureDistLayout(
@@ -140,7 +141,7 @@ export function useAnimationController(
           groupBands: handle.sampleGroupBands,
           nGroups: handle.nGroups,
           statistic: handle.statistic,
-          statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
+          statKind: (handle.statKind || '') as 'difference' | 'ratio' | 'average_deviation' | '',
           paneInnerHeight: handle.paneInnerHeight,
           populationGrandStat: handle.grandMean,
           populationStat: state.population_stat ?? 0,
@@ -187,10 +188,11 @@ export function useAnimationController(
             groupBands: handle.sampleGroupBands,
             nGroups: handle.nGroups,
             statistic: handle.statistic,
-            statKind: (handle.statKind || '') as 'difference' | 'average_deviation' | '',
+            statKind: (handle.statKind || '') as 'difference' | 'ratio' | 'average_deviation' | '',
             paneInnerHeight: handle.paneInnerHeight,
             populationGrandStat: handle.grandMean,
             populationStat: state.population_stat ?? 0,
+            resetPane: r === start && start === 0,
           })
           r = batchEnd
         }

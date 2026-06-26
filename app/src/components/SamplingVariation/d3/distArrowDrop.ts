@@ -7,7 +7,9 @@ import {
   transitionHorizontalLinesTo,
   transitionVerticalLine,
 } from './drawArrow'
+import { fiveNumSummary } from './boxplot'
 import { appendDistDotElement, distTarget, stackDotYsByBin, type DistLayout } from './distPhysics'
+import { distBaselineValue, type SamplingStatistic } from '../statistics'
 import { type StatKind } from './sampleStatSummary'
 import { twoGroupDiffZone, type GroupBand } from './groupLayout'
 import { PANE, type PaneLayout, toAbsolute } from './paneCoords'
@@ -42,7 +44,7 @@ export type DistArrowDropContext = {
   sampleIndices: number[]
   paneInnerHeight: number
   groupBands: GroupBand[]
-  statistic: 'mean' | 'median'
+  statistic: SamplingStatistic
   /** k≥3: sample grand mean/median; otherwise unused. */
   populationGrandStat: number
   populationStat: number
@@ -86,23 +88,6 @@ function fadeOpacity(
     .then(() => undefined)
 }
 
-async function fadeInDistDot(
-  distGroup: SVGGElement,
-  replicateIndex: number,
-  sampleStat: number,
-  x: number,
-  y: number,
-  dotRadius: number,
-  duration: number,
-): Promise<void> {
-  appendDistDotElement(distGroup, replicateIndex, sampleStat, x, y, dotRadius)
-  const dot = d3
-    .select(distGroup)
-    .select<SVGCircleElement>(`.dist-dot[data-index="${replicateIndex}"]`)
-  dot.attr('opacity', 0)
-  await fadeOpacity(dot, 1, duration)
-}
-
 /** Remove per-replicate P3 overlays; kept until the next distribution animation starts. */
 export function removeDistTransientOverlays(distGroup: SVGGElement) {
   d3.select(distGroup)
@@ -137,14 +122,15 @@ export async function animateDistArrowDrop(
     distGroup,
     flyGroup,
     paneLayout,
+    population,
     sampleStat,
+    sampleIndices,
     sampleX,
     distX,
     distLayout,
     distBaselineY,
     dotRadius,
     boxTop,
-    boxAreaHeight,
     replicateIndex,
     timingMs,
     signal,
@@ -157,7 +143,9 @@ export async function animateDistArrowDrop(
     paneInnerHeight,
     groupBands,
     populationGrandStat,
+    statistic,
     statZoneTop,
+    boxAreaHeight,
     m,
   } = ctx
 
@@ -201,17 +189,18 @@ export async function animateDistArrowDrop(
     if (signal.aborted) return
   }
 
-  if (numCatMode && (statKind === 'difference' || nGroups === 2)) {
+  if (numCatMode && (statKind === 'difference' || statKind === 'ratio' || nGroups === 2)) {
     const low = groupStats[0]!
     const high = groupStats[1]!
-    const zeroX = distX(0)
+    const baseline = distBaselineValue(statKind)
+    const baselineX = distX(baseline)
     const statX = distX(sampleStat)
     if (
       !Number.isFinite(low) ||
       !Number.isFinite(high) ||
-      zeroX == null ||
+      baselineX == null ||
       statX == null ||
-      !Number.isFinite(zeroX) ||
+      !Number.isFinite(baselineX) ||
       !Number.isFinite(statX)
     ) {
       placeDot()
@@ -231,7 +220,7 @@ export async function animateDistArrowDrop(
       sampleX(high)!,
       diffZone.arrowY,
     )
-    const endFrom = toAbsolute(paneLayout, PANE.DIST, zeroX, distBaselineY)
+    const endFrom = toAbsolute(paneLayout, PANE.DIST, baselineX, distBaselineY)
     const endTo = toAbsolute(paneLayout, PANE.DIST, statX, distBaselineY)
 
     const arrowG = drawHorizontalArrow(
@@ -265,7 +254,7 @@ export async function animateDistArrowDrop(
 
     drawHorizontalArrow(
       distSel,
-      zeroX,
+      baselineX,
       statX,
       distBaselineY,
       '#dc2626',
@@ -535,6 +524,91 @@ export async function animateDistArrowDrop(
     } catch {
       // interrupted
     }
+  } else if (!numCatMode && statistic === 'iqr') {
+    const sampleValues = sampleIndices
+      .map((index) => population[index])
+      .filter((value): value is number => value != null && Number.isFinite(value))
+    const summary = fiveNumSummary(sampleValues)
+    const zeroX = distX(0)
+    const statX = distX(sampleStat)
+    if (
+      !summary ||
+      zeroX == null ||
+      statX == null ||
+      !Number.isFinite(zeroX) ||
+      !Number.isFinite(statX)
+    ) {
+      placeDot()
+      return
+    }
+
+    const boxY = boxTop + dotRadius
+    const startFrom = toAbsolute(
+      paneLayout,
+      PANE.SAMPLE,
+      sampleX(summary.q1)!,
+      boxY,
+    )
+    const startTo = toAbsolute(
+      paneLayout,
+      PANE.SAMPLE,
+      sampleX(summary.q3)!,
+      boxY,
+    )
+    const endFrom = toAbsolute(paneLayout, PANE.DIST, zeroX, distBaselineY)
+    const endTo = toAbsolute(paneLayout, PANE.DIST, statX, distBaselineY)
+
+    const arrowG = drawHorizontalArrow(
+      flySel,
+      startFrom.x,
+      startTo.x,
+      startFrom.y,
+      '#dc2626',
+      1,
+      undefined,
+      { minSpan: 0 },
+    )
+    arrowG.attr('class', 'dist-arrow-fly')
+    try {
+      await transitionHorizontalArrow(
+        arrowG,
+        startFrom.x,
+        startTo.x,
+        startFrom.y,
+        endFrom.x,
+        endTo.x,
+        endFrom.y,
+        slideMs,
+        '#dc2626',
+        1,
+      )
+    } finally {
+      flySel.selectAll('.dist-arrow-fly').remove()
+    }
+    if (signal.aborted) return
+
+    drawHorizontalArrow(
+      distSel,
+      zeroX,
+      statX,
+      distBaselineY,
+      '#dc2626',
+      1,
+      undefined,
+      { minSpan: 0 },
+    ).attr('class', 'dist-transient-arrow')
+
+    const dotX = target?.x ?? statX
+    const dotY = target?.y ?? distBaselineY
+    appendDistDotElement(
+      distGroup,
+      replicateIndex,
+      sampleStat,
+      dotX,
+      dotY,
+      dotRadius,
+    )
+    distSel.select('.dist-transient-arrow').remove()
   } else {
     const axisLocalX = distX(sampleStat)!
     const dotR = dotRadius - 1

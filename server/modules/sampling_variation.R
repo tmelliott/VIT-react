@@ -113,7 +113,7 @@ samplingVariation <- createWidget(
                     .self$group_levels <- preview$group_levels
                     .self$n_groups <- preview$n_groups
                     .self$stat_kind <- if (preview$n_groups == 2L) {
-                        "difference"
+                        if (.self$statistic == "iqr") "ratio" else "difference"
                     } else {
                         "average_deviation"
                     }
@@ -161,9 +161,9 @@ samplingVariation <- createWidget(
         record_choices = ts_function(
             function() {
                 stat <- .self$statistic
-                if (!stat %in% c("mean", "median")) {
+                if (!stat %in% c("mean", "median", "lq", "uq", "iqr")) {
                     .self$status <- "error"
-                    .self$error_message <- "Statistic must be mean or median"
+                    .self$error_message <- "Statistic must be mean, median, LQ, UQ, or IQR"
                     .self$updateState()
                     return(NULL)
                 }
