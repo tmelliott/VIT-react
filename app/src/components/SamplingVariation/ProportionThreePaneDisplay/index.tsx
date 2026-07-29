@@ -9,14 +9,10 @@ import {
 import * as d3 from 'd3'
 import { drawBottomAxis } from '../d3/drawPaneAxis'
 import {
+  drawHybridProportionChart,
   drawMultiGroupProportionBars,
-  drawProportionBar,
   removeProportionBar,
 } from '../d3/proportionBar'
-import {
-  multiProportionBarLayouts,
-  singleProportionBarLayout,
-} from '../d3/proportionLayout'
 import {
   drawDistPopulationReferenceLine,
   drawDistTwoGroupReferenceLines,
@@ -172,15 +168,6 @@ export const ProportionThreePaneDisplay = forwardRef<
     innerHeight,
   )
 
-  const singleBarLayout = useMemo(
-    () => singleProportionBarLayout(innerHeight),
-    [innerHeight],
-  )
-  const multiBarLayouts = useMemo(
-    () => (twoCat ? multiProportionBarLayouts(innerHeight, nGroups) : []),
-    [twoCat, innerHeight, nGroups],
-  )
-
   const paneLayout = useMemo<PaneLayout>(
     () => ({
       marginLeft: margin.left,
@@ -235,15 +222,15 @@ export const ProportionThreePaneDisplay = forwardRef<
     d3.select(g).selectAll('.prop-group').remove()
 
     if (oneCat) {
-      drawProportionBar(
+      drawHybridProportionChart(
         g,
         populationCategory,
-        singleBarLayout,
-        popX,
         innerWidth,
+        innerHeight,
+        popX,
         {
-          showLabels: true,
-          showStatLine: showPopulationStat,
+          showLegend: true,
+          showStat: showPopulationStat,
           statValue: populationStat,
           categoryLabels: catLabels,
         },
@@ -254,12 +241,13 @@ export const ProportionThreePaneDisplay = forwardRef<
         populationCategory,
         populationGroup,
         groupLevels,
-        multiBarLayouts,
+        null,
         popX,
         innerWidth,
         groupStats.slice(0, nGroups),
         catLabels,
         showPopulationStat,
+        innerHeight,
       )
     }
   }, [
@@ -272,8 +260,6 @@ export const ProportionThreePaneDisplay = forwardRef<
     popX,
     innerWidth,
     innerHeight,
-    singleBarLayout,
-    multiBarLayouts,
     showPopulationStat,
     populationStat,
     catLabels,
