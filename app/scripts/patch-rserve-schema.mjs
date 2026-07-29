@@ -19,6 +19,27 @@ const zStringArray = () =>
       if (val === '') return []
       return [val]
     })
+
+/** Rserve may send empty or plain arrays instead of typed arrays. */
+const zInt32Array = () =>
+  z
+    .union([z.instanceof(Int32Array), z.array(z.number()), z.undefined()])
+    .transform((val) => {
+      if (val === undefined) return undefined
+      if (val instanceof Int32Array) return val
+      if (Array.isArray(val)) return Int32Array.from(val)
+      return new Int32Array(0)
+    })
+
+const zFloat64Array = () =>
+  z
+    .union([z.instanceof(Float64Array), z.array(z.number()), z.undefined()])
+    .transform((val) => {
+      if (val === undefined) return undefined
+      if (val instanceof Float64Array) return val
+      if (Array.isArray(val)) return Float64Array.from(val)
+      return new Float64Array(0)
+    })
 `
 
 let src = readFileSync(path, 'utf8')
@@ -29,6 +50,23 @@ if (!src.includes('const zStringArray')) {
     `import { z } from "zod";\n${zStringArrayHelper}\n`,
   )
 }
+
+src = src.replaceAll(
+  'z.union([z.instanceof(Int32Array), z.undefined()])',
+  'zInt32Array()',
+)
+src = src.replaceAll(
+  /z\.union\(\[\s*z\.instanceof\(Int32Array\),\s*z\.undefined\(\),\s*\]\)/g,
+  'zInt32Array()',
+)
+src = src.replaceAll(
+  'z.union([z.instanceof(Float64Array), z.undefined()])',
+  'zFloat64Array()',
+)
+src = src.replaceAll(
+  /z\.union\(\[\s*z\.instanceof\(Float64Array\),\s*z\.undefined\(\),\s*\]\)/g,
+  'zFloat64Array()',
+)
 
 src = src.replaceAll(
   'z.union([z.array(z.string()), z.undefined()])',
@@ -42,6 +80,14 @@ src = src.replaceAll(
   'set: Robj.ocap([z.array(z.string())]',
   'set: Robj.ocap([zStringArray()]',
 )
+
+// State callbacks may receive plain JS arrays inside nested objects (e.g. scales).
+src = src.replaceAll('pop: z.instanceof(Float64Array)', 'pop: zFloat64Array()')
+src = src.replaceAll(
+  'sample: z.instanceof(Float64Array)',
+  'sample: zFloat64Array()',
+)
+src = src.replaceAll('dist: z.instanceof(Float64Array)', 'dist: zFloat64Array()')
 
 if (!src.startsWith(marker)) {
   src = `${marker}\n${src}`

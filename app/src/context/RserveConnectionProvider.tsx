@@ -10,12 +10,14 @@ export function RserveConnectionProvider({
   connectionStatus,
   isReady,
   error,
+  reconnectAttempt = 0,
   children,
 }: {
   host: string
   connectionStatus: RserveConnectionStatus
   isReady: boolean
   error?: string
+  reconnectAttempt?: number
   children: ReactNode
 }) {
   const value: RserveConnectionState = {
@@ -23,6 +25,7 @@ export function RserveConnectionProvider({
     connectionStatus,
     isReady,
     error,
+    reconnectAttempt,
   }
 
   return (

@@ -6,7 +6,7 @@ export type AnimationPhase = 'idle' | 'playing' | 'paused'
 
 export type MValue = 1 | 5 | 20 | 1000
 
-export type StatKind = 'difference' | 'ratio' | 'average_deviation' | ''
+export type StatKind = 'difference' | 'ratio' | 'average_deviation' | 'proportion' | ''
 
 export function toNumberArray(
   data: Float64Array | number[] | undefined | null,
@@ -33,6 +33,17 @@ export function isNumCatMode(nGroups: number, yvar: string): boolean {
   return yvar !== '' && nGroups >= 2
 }
 
+export function isProportionCatMode(
+  support: string,
+  nGroups: number,
+  yvar: string,
+): boolean {
+  return (
+    (support === 'one_cat' || support === 'two_cat') &&
+    (support === 'one_cat' || (yvar !== '' && nGroups >= 2))
+  )
+}
+
 export function statKindLabel(
   kind: StatKind,
   nGroups: number,
@@ -41,6 +52,7 @@ export function statKindLabel(
   if (kind === 'ratio' || (nGroups === 2 && statistic === 'iqr')) {
     return 'IQR ratio'
   }
+  if (kind === 'proportion') return 'Proportion'
   if (kind === 'difference' || nGroups === 2) return 'Difference'
   if (kind === 'average_deviation' || nGroups > 2) return 'Average deviation'
   return ''

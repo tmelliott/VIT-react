@@ -40,11 +40,14 @@ vitWidget <- createWidget(
         cat_cols <- categorical_column_names(d)
         child <- .self$samplingVariation
         child$vit <- .self
+        child[[".__skip_preview__"]] <- TRUE
+        on.exit({ child[[".__skip_preview__"]] <- FALSE }, add = TRUE)
         child$set("variables", num_cols)
         child$set("group_variables", cat_cols)
         child$set("all_variables", names(d))
         child$set("xvar", "")
         child$set("yvar", "")
+        child$set("loi", "")
         child$set("status", "idle")
         child$set("progress", 0L)
         reset_result_state(child)

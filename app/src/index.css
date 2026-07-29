@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+:root {
+  --control-panel-tab-h: 11rem;
+  --control-panel-tab-h-compact: 9rem;
+}
+
 html,
 body,
 #root {

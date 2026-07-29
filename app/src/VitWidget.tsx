@@ -3,7 +3,6 @@ import type { VitAppShape } from './rserve/vit.types'
 import { VitAppProvider } from './context/VitAppProvider'
 import { RserveConnectionProvider } from './context/RserveConnectionProvider'
 import { AppRouter } from './AppRouter'
-import { RserveStatusBar } from './components/RserveStatusBar'
 import { RserveDisconnectOverlay } from './components/RserveDisconnectOverlay'
 import { getRserveHost } from './lib/rserveHost'
 import { useVitRserve } from './hooks/useVitRserve'
@@ -53,6 +52,7 @@ export function VitWidget() {
       connectionStatus={connectionStatus}
       isReady={isReady}
       error={error}
+      reconnectAttempt={reconnectAttempt}
     >
       <div className="flex h-full min-h-0 flex-col">
         <div
@@ -62,12 +62,6 @@ export function VitWidget() {
           {appShell}
         </div>
         {showOverlay ? <RserveDisconnectOverlay /> : null}
-        <RserveStatusBar
-          status={connectionStatus}
-          host={rserveHost}
-          error={error}
-          reconnectAttempt={reconnectAttempt}
-        />
       </div>
     </RserveConnectionProvider>
   )

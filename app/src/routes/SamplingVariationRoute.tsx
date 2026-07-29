@@ -3,7 +3,6 @@ import { ModuleHeader } from '../components/SamplingVariation/ModuleHeader'
 import { SamplingVariation } from '../components/SamplingVariation'
 import { VitAppContext } from '../context/vitAppContext'
 import { useRserveConnection } from '../hooks/useRserveConnection'
-import type { VitWidgetHook } from '../rserve/vit.types'
 
 export function SamplingVariationRoute() {
   const { isReady } = useRserveConnection()
@@ -11,7 +10,7 @@ export function SamplingVariationRoute() {
 
   if (!isReady || !vitApp) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 md:gap-3 md:p-4">
         <ModuleHeader />
         <p className="text-sm text-gray-600" role="status">
           This module is unavailable until the R connection is ready.
@@ -20,13 +19,7 @@ export function SamplingVariationRoute() {
     )
   }
 
-  return <SamplingVariationRouteContent widget={vitApp} />
-}
-
-function SamplingVariationRouteContent({ widget }: { widget: VitWidgetHook }) {
-  const { children } = widget
-
-  if (!children?.samplingVariation) {
+  if (!vitApp.children?.samplingVariation) {
     return (
       <p className="p-4 text-gray-600" role="alert">
         Sampling variation module is not available.
@@ -35,9 +28,9 @@ function SamplingVariationRouteContent({ widget }: { widget: VitWidgetHook }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 md:gap-3 md:p-4">
       <ModuleHeader />
-      <SamplingVariation module={children.samplingVariation} />
+      <SamplingVariation />
     </div>
   )
 }

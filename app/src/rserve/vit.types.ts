@@ -46,9 +46,14 @@ export type SamplingVariationProperties = {
   progress: PropertyGet<number>
   error_message: PropertyGet<string>
   population: PropertyGet<Float64Array>
+  population_category: PropertyGet<Int32Array>
   population_group: PropertyGet<Int32Array>
   group_levels: PropertyGet<string[]>
   group_stats: PropertyGet<Float64Array>
+  x_levels: PropertyGet<string[]>
+  category_labels: PropertyGet<string[]>
+  loi: PropertyGet<string>
+  loi_alt: PropertyGet<string>
   stat_kind: PropertyGet<string>
   n_groups: PropertyGet<number>
   population_stat: PropertyGet<number>
@@ -64,6 +69,7 @@ export type SamplingVariationProperties = {
 
 export type SamplingVariationMethods = {
   record_choices: () => Promise<null>
+  refresh_preview: (loi?: string) => Promise<null>
 }
 
 export type SamplingVariationHook = UseWidgetReturn<

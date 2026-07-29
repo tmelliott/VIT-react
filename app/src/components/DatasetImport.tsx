@@ -8,6 +8,7 @@ type DatasetImportProps = {
   loading: boolean
   nrows: number
   ncols: number
+  compact?: boolean
 }
 
 export function DatasetImport({
@@ -20,10 +21,18 @@ export function DatasetImport({
   loading,
   nrows,
   ncols,
+  compact = false,
 }: DatasetImportProps) {
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-gray-200 bg-gray-50 p-4">
-      <h2 className="text-lg font-semibold">Dataset</h2>
+    <div
+      className={`flex flex-col gap-2 ${
+        compact
+          ? 'p-0'
+          : 'rounded-md border border-gray-200 bg-gray-50 p-4'
+      }`}
+    >
+      {!compact && <h2 className="text-lg font-semibold">Dataset</h2>}
+      {compact && <h2 className="text-base font-semibold">Dataset</h2>}
       <label className="flex flex-col gap-1 text-sm" htmlFor="dataset-url">
         URL
         <input

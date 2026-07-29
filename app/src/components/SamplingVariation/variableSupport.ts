@@ -1,4 +1,10 @@
-export type VariableSupport = 'empty' | 'one_num' | 'num_cat' | 'unsupported'
+export type VariableSupport =
+  | 'empty'
+  | 'one_num'
+  | 'num_cat'
+  | 'one_cat'
+  | 'two_cat'
+  | 'unsupported'
 
 export function isNumericVariable(name: string, variables: string[]): boolean {
   return variables.includes(name)
@@ -18,10 +24,22 @@ export function getVariableSupport(
   groupVariables: string[],
 ): VariableSupport {
   if (!xvar) return 'empty'
-  if (!isNumericVariable(xvar, variables)) return 'unsupported'
-  if (!yvar) return 'one_num'
-  if (isCategoricalVariable(yvar, groupVariables)) return 'num_cat'
+  const xIsNum = isNumericVariable(xvar, variables)
+  const xIsCat = isCategoricalVariable(xvar, groupVariables)
+  const yIsCat = yvar !== '' && isCategoricalVariable(yvar, groupVariables)
+
+  if (xIsNum && !yIsCat) {
+    if (!yvar) return 'one_num'
+    return 'unsupported'
+  }
+  if (xIsNum && yIsCat) return 'num_cat'
+  if (xIsCat && !yIsCat) return 'one_cat'
+  if (xIsCat && yIsCat && yvar !== xvar) return 'two_cat'
   return 'unsupported'
+}
+
+export function isProportionMode(support: VariableSupport): boolean {
+  return support === 'one_cat' || support === 'two_cat'
 }
 
 export function populationDomain(values: number[]): [number, number] {
@@ -42,10 +60,25 @@ export function populationDomain(values: number[]): [number, number] {
   return [min - pad, max + pad]
 }
 
+/** Default [0, 1] domain for proportion scales. */
+export function proportionScaleDomain(
+  values: number[],
+  scalesPop: Float64Array | number[] | undefined | null,
+): [number, number] {
+  const scaled = scalesPop == null ? [] : Array.from(scalesPop)
+  if (scaled.length >= 2) return [scaled[0]!, scaled[1]!]
+  if (values.length > 0) return populationDomain(values)
+  return [0, 1]
+}
+
 export function effectivePopDomain(
   population: number[],
   scalesPop: Float64Array | number[] | undefined | null,
+  proportionMode = false,
 ): [number, number] {
+  // Proportion bars always use the unit interval so focus/other segments
+  // map to true proportions of pane width (not a tight band around p̂).
+  if (proportionMode) return [0, 1]
   const scaled = scalesPop == null ? [] : Array.from(scalesPop)
   if (scaled.length >= 2) return [scaled[0]!, scaled[1]!]
   if (population.length > 0) return populationDomain(population)
@@ -55,10 +88,15 @@ export function effectivePopDomain(
 export function effectiveDistDomain(
   sampleStats: number[],
   scalesDist: Float64Array | number[] | undefined | null,
+  proportionMode = false,
 ): [number, number] {
   const scaled = scalesDist == null ? [] : Array.from(scalesDist)
   if (scaled.length >= 2) return [scaled[0]!, scaled[1]!]
-  if (sampleStats.length > 0) return populationDomain(sampleStats)
+  if (sampleStats.length > 0) {
+    return proportionMode
+      ? proportionScaleDomain(sampleStats, null)
+      : populationDomain(sampleStats)
+  }
   return [0, 1]
 }
 

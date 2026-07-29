@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { VitAppShape } from '../rserve/vit.types'
 import type { VitWidgetHook } from '../rserve/vit.types'
 import { VitAppContext } from './vitAppContext'
+import { SamplingVariationWidgetProvider } from './SamplingVariationWidgetProvider'
 
 export function VitAppProvider({
   app,
@@ -17,7 +18,17 @@ export function VitAppProvider({
     return <p className="p-4 text-gray-600">Loading VIT…</p>
   }
 
+  const samplingVariationCtor = widget.children?.samplingVariation
+
   return (
-    <VitAppContext.Provider value={widget}>{children}</VitAppContext.Provider>
+    <VitAppContext.Provider value={widget}>
+      {samplingVariationCtor ? (
+        <SamplingVariationWidgetProvider ctor={samplingVariationCtor}>
+          {children}
+        </SamplingVariationWidgetProvider>
+      ) : (
+        children
+      )}
+    </VitAppContext.Provider>
   )
 }

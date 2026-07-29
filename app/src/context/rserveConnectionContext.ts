@@ -6,6 +6,7 @@ export type RserveConnectionState = {
   connectionStatus: RserveConnectionStatus
   isReady: boolean
   error?: string
+  reconnectAttempt?: number
 }
 
 export const RserveConnectionContext =

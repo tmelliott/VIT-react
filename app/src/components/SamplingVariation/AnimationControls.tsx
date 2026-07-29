@@ -14,6 +14,7 @@ type AnimationControlsProps = {
   onStop: () => void
   onReset: () => void
   cursor: number
+  compact?: boolean
 }
 
 function MRadioGroup({
@@ -28,7 +29,7 @@ function MRadioGroup({
   disabled: boolean
 }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-1 flex-wrap items-center gap-x-2 gap-y-1">
       {M_VALUES.map((m) => (
         <label key={m} className="flex items-center gap-1 text-sm">
           <input
@@ -46,6 +47,44 @@ function MRadioGroup({
   )
 }
 
+function MGoRow({
+  label,
+  name,
+  value,
+  onChange,
+  onGo,
+  disabled,
+}: {
+  label: string
+  name: string
+  value: MValue
+  onChange: (m: MValue) => void
+  onGo: () => void
+  disabled: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex items-center gap-2">
+        <MRadioGroup
+          name={name}
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+        />
+        <button
+          type="button"
+          className="shrink-0 rounded bg-green-600 px-3 py-1 text-sm text-white disabled:opacity-50"
+          disabled={disabled}
+          onClick={onGo}
+        >
+          Go
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function AnimationControls({
   phase,
   samplingM,
@@ -58,58 +97,48 @@ export function AnimationControls({
   onStop,
   onReset,
   cursor,
+  compact = false,
 }: AnimationControlsProps) {
   const playing = phase === 'playing'
   const paused = phase === 'paused'
 
   return (
-    <div className="flex flex-col gap-3 p-4 bg-gray-50 rounded-md border border-gray-200">
-      <h2 className="text-lg font-semibold">Animation</h2>
-      <p className="text-sm text-gray-600">Next sample index: {cursor}</p>
+    <div
+      className={`flex flex-col gap-3 bg-gray-50 ${
+        compact
+          ? 'gap-2 p-0'
+          : 'rounded-md border border-gray-200 p-4'
+      }`}
+    >
+      {!compact && <h2 className="text-lg font-semibold">Animation</h2>}
+      {!compact && (
+        <p className="text-sm text-gray-600">Next sample index: {cursor}</p>
+      )}
 
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Sampling</span>
-          <MRadioGroup
-            name="sampling-m"
-            value={samplingM}
-            onChange={onSamplingMChange}
-            disabled={playing}
-          />
-          <button
-            type="button"
-            className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-50 w-full"
-            disabled={playing}
-            onClick={() => onGo('sampling')}
-          >
-            Go
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium">Sampling distribution</span>
-          <MRadioGroup
-            name="dist-m"
-            value={distM}
-            onChange={onDistMChange}
-            disabled={playing}
-          />
-          <button
-            type="button"
-            className="px-3 py-1 rounded bg-green-600 text-white disabled:opacity-50 w-full"
-            disabled={playing}
-            onClick={() => onGo('distribution')}
-          >
-            Go
-          </button>
-        </div>
+        <MGoRow
+          label="Sampling"
+          name="sampling-m"
+          value={samplingM}
+          onChange={onSamplingMChange}
+          onGo={() => onGo('sampling')}
+          disabled={playing}
+        />
+        <MGoRow
+          label="Sampling distribution"
+          name="dist-m"
+          value={distM}
+          onChange={onDistMChange}
+          onGo={() => onGo('distribution')}
+          disabled={playing}
+        />
       </div>
 
       <div className="flex gap-2">
         {playing && (
           <button
             type="button"
-            className="px-3 py-1 rounded bg-amber-500 text-white"
+            className="rounded bg-amber-500 px-2 py-1 text-xs text-white md:px-3 md:text-sm"
             onClick={onPause}
           >
             Pause
@@ -118,7 +147,7 @@ export function AnimationControls({
         {paused && (
           <button
             type="button"
-            className="px-3 py-1 rounded bg-amber-500 text-white"
+            className="rounded bg-amber-500 px-2 py-1 text-xs text-white md:px-3 md:text-sm"
             onClick={onResume}
           >
             Resume
@@ -126,7 +155,7 @@ export function AnimationControls({
         )}
         <button
           type="button"
-          className="px-3 py-1 rounded bg-gray-600 text-white disabled:opacity-50"
+          className="rounded bg-gray-600 px-2 py-1 text-xs text-white disabled:opacity-50 md:px-3 md:text-sm"
           disabled={phase === 'idle'}
           onClick={onStop}
         >
@@ -134,7 +163,7 @@ export function AnimationControls({
         </button>
         <button
           type="button"
-          className="px-3 py-1 rounded bg-gray-400 text-white"
+          className="rounded bg-gray-400 px-2 py-1 text-xs text-white md:px-3 md:text-sm"
           onClick={onReset}
         >
           Reset

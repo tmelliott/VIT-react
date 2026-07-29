@@ -37,8 +37,11 @@ export function useModuleSearchParams({
   )
 
   useEffect(() => {
-    if (!hasData || variables.length === 0) return
+    if (!hasData || (variables.length === 0 && groupVariables.length === 0)) {
+      return
+    }
 
+    const allVariables = [...variables, ...groupVariables]
     const prev = prevSearchRef.current
     const next: ModuleSearchFields = {
       xvar: search.xvar,
@@ -50,7 +53,7 @@ export function useModuleSearchParams({
     if (
       search.xvar &&
       search.xvar !== prev.xvar &&
-      variables.includes(search.xvar)
+      allVariables.includes(search.xvar)
     ) {
       void set('xvar', search.xvar)
     }

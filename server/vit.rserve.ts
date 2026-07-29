@@ -15,18 +15,26 @@ export const samplingVariation = Robj.ocap(
             all_variables: z.union([z.array(z.string()), z.undefined()]),
             xvar: z.union([z.string(), z.undefined()]),
             yvar: z.union([z.string(), z.undefined()]),
+            loi: z.union([z.string(), z.undefined()]),
             sample_size: z.union([z.number(), z.undefined()]),
             statistic: z.union([z.string(), z.undefined()]),
             status: z.union([z.string(), z.undefined()]),
             progress: z.union([z.number(), z.undefined()]),
             error_message: z.union([z.string(), z.undefined()]),
             population: z.union([z.instanceof(Float64Array), z.undefined()]),
+            population_category: z.union([
+              z.instanceof(Int32Array),
+              z.undefined(),
+            ]),
             population_group: z.union([
               z.instanceof(Int32Array),
               z.undefined(),
             ]),
             group_levels: z.union([z.array(z.string()), z.undefined()]),
             group_stats: z.union([z.instanceof(Float64Array), z.undefined()]),
+            x_levels: z.union([z.array(z.string()), z.undefined()]),
+            category_labels: z.union([z.array(z.string()), z.undefined()]),
+            loi_alt: z.union([z.string(), z.undefined()]),
             stat_kind: z.union([z.string(), z.undefined()]),
             n_groups: z.union([z.number(), z.undefined()]),
             population_stat: z.union([z.number(), z.undefined()]),
@@ -90,6 +98,14 @@ export const samplingVariation = Robj.ocap(
         get: Robj.ocap([], Robj.character(1)),
         set: Robj.ocap([z.string()], Robj.null()),
       }),
+      loi: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.string()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(1)),
+        set: Robj.ocap([z.string()], Robj.null()),
+      }),
       sample_size: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.number()], z.null()), z.string()],
@@ -141,6 +157,14 @@ export const samplingVariation = Robj.ocap(
         get: Robj.ocap([], Robj.numeric(0)),
         set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
       }),
+      population_category: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.instanceof(Int32Array)], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.integer(0)),
+        set: Robj.ocap([z.instanceof(Int32Array)], Robj.null()),
+      }),
       population_group: Robj.list({
         register: Robj.ocap(
           [Robj.js_function([z.instanceof(Int32Array)], z.null()), z.string()],
@@ -167,6 +191,30 @@ export const samplingVariation = Robj.ocap(
         ),
         get: Robj.ocap([], Robj.numeric(0)),
         set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      x_levels: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.array(z.string())], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(0)),
+        set: Robj.ocap([z.array(z.string())], Robj.null()),
+      }),
+      category_labels: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.array(z.string())], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(0)),
+        set: Robj.ocap([z.array(z.string())], Robj.null()),
+      }),
+      loi_alt: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.string()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.character(1)),
+        set: Robj.ocap([z.string()], Robj.null()),
       }),
       stat_kind: Robj.list({
         register: Robj.ocap(
@@ -267,7 +315,10 @@ export const samplingVariation = Robj.ocap(
         strict: Robj.character(1),
       }),
     }),
-    methods: Robj.list({ record_choices: Robj.ocap([], Robj.null()) }),
+    methods: Robj.list({
+      refresh_preview: Robj.ocap([z.string()], Robj.null()),
+      record_choices: Robj.ocap([], Robj.null()),
+    }),
   }),
 );
 export const vitWidget = Robj.ocap(
