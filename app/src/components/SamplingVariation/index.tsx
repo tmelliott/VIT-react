@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo, useEffect, type ComponentRef } from 'react'
+import { useRef, useState, useMemo, useEffect } from 'react'
 import type { SamplingVariationHook } from '../../rserve/vit.types'
 import { DatasetImport } from '../DatasetImport'
 import { useDatasetFromUrl } from '../../hooks/useDatasetFromUrl'
@@ -6,7 +6,10 @@ import { useModuleSearchParams } from '../../hooks/useModuleSearchParams'
 import { AnimationControls } from './AnimationControls'
 import { ConfigPanel } from './ConfigPanel'
 import { ControlPanelDock } from './ControlPanelDock'
-import { useAnimationController } from './hooks/useAnimationController'
+import {
+  useAnimationController,
+} from './hooks/useAnimationController'
+import type { PaneHandle } from './paneHandle'
 import { ProgressBar } from './ProgressBar'
 import { ThreePaneDisplay } from './ThreePaneDisplay'
 import { ProportionThreePaneDisplay } from './ProportionThreePaneDisplay'
@@ -61,7 +64,7 @@ function SamplingVariationView({
 }) {
   const { state, set, methods } = widget
   const dataset = useDatasetFromUrl()
-  const paneRef = useRef<ComponentRef<typeof ThreePaneDisplay>>(null)
+  const paneRef = useRef<PaneHandle | null>(null)
   const [configEpoch, setConfigEpoch] = useState(0)
   const bumpConfig = () => setConfigEpoch((n) => n + 1)
 
@@ -173,6 +176,7 @@ function SamplingVariationView({
       <main className="order-1 flex min-h-0 min-w-0 flex-1 md:order-2 md:flex-2">
         {proportionMode ? (
           <ProportionThreePaneDisplay
+            ref={paneRef}
             populationCategory={populationCategory}
             populationGroup={populationGroup}
             groupLevels={groupLevels}

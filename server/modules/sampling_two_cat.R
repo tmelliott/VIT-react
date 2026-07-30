@@ -55,14 +55,34 @@ encode_groups <- function(y, levels) {
     match(y, levels) - 1L
 }
 
-two_group_prop_diff <- function(gprops) {
-    gprops[[2L]] - gprops[[1L]]
+#' Combine two group proportions into a summary statistic.
+#' kind = "difference" → p̂₂ − p̂₁; kind = "ratio" → p̂₂ / p̂₁.
+two_group_prop_summary <- function(gprops, kind = "difference") {
+    p0 <- gprops[[1L]]
+    p1 <- gprops[[2L]]
+    if (identical(kind, "ratio")) {
+        if (!is.finite(p0) || p0 == 0) {
+            return(NA_real_)
+        }
+        return(p1 / p0)
+    }
+    p1 - p0
 }
 
-population_prop_summary <- function(encoded, y, levels, n_groups) {
+#' @deprecated Use two_group_prop_summary(..., kind = "difference")
+two_group_prop_diff <- function(gprops) {
+    two_group_prop_summary(gprops, "difference")
+}
+
+population_prop_summary <- function(
+    encoded,
+    y,
+    levels,
+    n_groups,
+    kind = "difference") {
     if (n_groups == 2L) {
         gprops <- group_proportions_for_levels(encoded, y, levels)
-        two_group_prop_diff(gprops)
+        two_group_prop_summary(gprops, kind)
     } else {
         grand <- calc_proportion(encoded)
         devs <- vapply(levels, function(g) {
@@ -77,10 +97,11 @@ sample_prop_replicate_stat <- function(
     y,
     levels,
     n_groups,
-    population_grand = NULL) {
+    population_grand = NULL,
+    kind = "difference") {
     if (n_groups == 2L) {
         gprops <- group_proportions_for_levels(encoded, y, levels)
-        two_group_prop_diff(gprops)
+        two_group_prop_summary(gprops, kind)
     } else {
         ref <- if (!is.null(population_grand)) {
             population_grand

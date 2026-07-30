@@ -50,6 +50,16 @@ export function unitProportionLayout(
 }
 
 /**
+ * P2 sample unit chart: fit into the same upper "dot area" used by one-numeric,
+ * leaving the lower box strip free for the estimate barcode.
+ */
+export function proportionSampleLayout(
+  dotAreaHeight: number,
+): UnitProportionLayout {
+  return unitProportionLayout(Math.max(80, dotAreaHeight))
+}
+
+/**
  * Compact unit-bar row for two-cat groups.
  */
 export function unitGroupRowLayout(
@@ -77,15 +87,17 @@ export function unitGroupRowLayout(
 export function multiUnitGroupRows(
   innerHeight: number,
   nGroups: number,
+  /** Reserved strip at the bottom (e.g. two-group difference zone). */
+  bottomReserve = 0,
 ): { top: number; height: number }[] {
   const gap = 10
-  const available = Math.max(60, innerHeight - 4)
+  const available = Math.max(60, innerHeight - 4 - Math.max(0, bottomReserve))
   const rowHeight = Math.max(
     72,
     (available - gap * Math.max(0, nGroups - 1)) / Math.max(1, nGroups),
   )
   const total = nGroups * rowHeight + gap * Math.max(0, nGroups - 1)
-  let top = Math.max(0, (innerHeight - total) / 2)
+  let top = Math.max(0, (available - total) / 2)
   const rows: { top: number; height: number }[] = []
   for (let i = 0; i < nGroups; i++) {
     rows.push({ top, height: rowHeight })

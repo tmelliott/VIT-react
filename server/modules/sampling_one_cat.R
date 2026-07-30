@@ -105,8 +105,7 @@ compute_one_cat_sampling <- function(
     }
 
     population_stat <- calc_proportion(encoded)
-    # Pop/sample axes are always [0, 1] so the proportion bar spans the pane.
-    # Dist axis uses the sampling distribution range.
+    # Pop / sample / dist axes share [0, 1] so P3 matches P1/P2.
     pop_domain <- c(0, 1)
 
     sample_stats <- numeric(num_reps)
@@ -127,8 +126,6 @@ compute_one_cat_sampling <- function(
         }
     }
 
-    dist_domain <- proportion_domain(sample_stats[is.finite(sample_stats)])
-
     list(
         population_category = as.integer(encoded),
         population_stat = population_stat,
@@ -139,7 +136,7 @@ compute_one_cat_sampling <- function(
         scales = list(
             pop = pop_domain,
             sample = pop_domain,
-            dist = dist_domain
+            dist = pop_domain
         ),
         dist_y = numeric(0),
         sample_size = sample_size

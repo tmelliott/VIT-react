@@ -570,7 +570,9 @@ samplingVariation <- createWidget(
                     .self$group_stats <- result$group_stats
                     .self$stat_kind <- result$stat_kind
                     .self$n_groups <- result$n_groups
-                    reset_two_cat_state(.self)
+                    # Clear categorical-only fields; do NOT reset_num_cat_state
+                    # (that would wipe the group fields we just set).
+                    reset_cat_preview_data(.self)
                 } else {
                     reset_num_cat_state(.self)
                     reset_two_cat_state(.self)

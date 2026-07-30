@@ -1,13 +1,29 @@
 import { useEffect, useRef, type RefObject } from 'react'
+import type * as d3 from 'd3'
 import { precomputeDistLayout, type DistLayout } from '../d3/distPhysics'
 import { toNumberArray } from '../types'
 import type { SamplingVariationState } from '../../rserve/vit.types'
-import type { ThreePaneHandle } from '../ThreePaneDisplay'
+import type { PaneLayout } from '../d3/paneCoords'
+import type { PaneHandle } from '../paneHandle'
 
-function layoutCacheKey(
-  statsLen: number,
-  handle: ThreePaneHandle,
-): string {
+/** Minimal handle surface needed to stack the sampling-distribution dots. */
+export type DistLayoutHandle = {
+  distX: d3.ScaleLinear<number, number>
+  distBaselineY: number
+  dotRadius: number
+  paneLayout: PaneLayout
+}
+
+function hasDistLayoutFields(handle: PaneHandle): handle is PaneHandle & DistLayoutHandle {
+  return (
+    'distBaselineY' in handle &&
+    typeof handle.distBaselineY === 'number' &&
+    'dotRadius' in handle &&
+    typeof handle.dotRadius === 'number'
+  )
+}
+
+function layoutCacheKey(statsLen: number, handle: DistLayoutHandle): string {
   const [d0, d1] = handle.distX.domain()
   return [
     statsLen,
@@ -20,7 +36,7 @@ function layoutCacheKey(
 
 export function useDistLayout(
   state: SamplingVariationState | undefined,
-  paneRef: RefObject<ThreePaneHandle | null>,
+  paneRef: RefObject<PaneHandle | null>,
 ) {
   const layoutRef = useRef<DistLayout | null>(null)
   const keyRef = useRef('')
@@ -38,6 +54,11 @@ export function useDistLayout(
       const handle = paneRef.current
       if (!handle) {
         requestAnimationFrame(compute)
+        return
+      }
+      if (!hasDistLayoutFields(handle)) {
+        layoutRef.current = null
+        keyRef.current = ''
         return
       }
       const stats = toNumberArray(state.sample_stats)
@@ -65,7 +86,7 @@ export function useDistLayout(
 
 export function ensureDistLayout(
   state: SamplingVariationState,
-  handle: ThreePaneHandle,
+  handle: DistLayoutHandle,
   layoutRef: RefObject<DistLayout | null>,
   keyRef: RefObject<string>,
 ): DistLayout {

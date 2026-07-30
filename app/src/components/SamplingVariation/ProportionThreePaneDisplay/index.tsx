@@ -19,7 +19,9 @@ import {
   removeDistReferenceLines,
 } from '../d3/referenceLine'
 import type { PaneLayout } from '../d3/paneCoords'
-import { domainsFromState, usePaneLayout, useSamplingScales } from '../hooks/useSamplingScales'
+import { domainsFromState, paneRegions, usePaneLayout, useSamplingScales } from '../hooks/useSamplingScales'
+import { DOT_RADIUS } from '../d3/heapLayout'
+import { computeSampleTwoGroupBands, type GroupBand } from '../d3/groupLayout'
 import {
   effectiveDistDomain,
   effectivePopDomain,
@@ -48,7 +50,19 @@ export type ProportionThreePaneHandle = {
   statKind: string
   populationCategory: number[]
   populationGroup: number[]
+  groupLevels: string[]
+  groupStats: number[]
   categoryLabels: [string, string]
+  /** P2 band geometry for two_cat k=2 (empty otherwise). */
+  sampleGroupBands: GroupBand[]
+  innerWidth: number
+  innerHeight: number
+  /** Same pane region fields as one-numeric — used by the P2→P3 drop. */
+  distBaselineY: number
+  dotRadius: number
+  boxTop: number
+  boxAreaHeight: number
+  statZoneTop: number
 }
 
 type ProportionThreePaneDisplayProps = {
@@ -138,8 +152,10 @@ export const ProportionThreePaneDisplay = forwardRef<
     Number.isFinite(populationStat)
       ? distDomainCenteredOn([0, 1], populationStat)
       : null
-  const distDomain =
-    twoCat && nGroups >= 3
+  // one_cat: keep P3 on the same [0, 1] scale as P1/P2.
+  const distDomain = oneCat
+    ? ([0, 1] as [number, number])
+    : twoCat && nGroups >= 3
       ? distDomainAlignedToPop([0, 1])
       : distDomainTwoGroup ?? rawDistDomain
 
@@ -159,8 +175,13 @@ export const ProportionThreePaneDisplay = forwardRef<
     size.height,
     false,
   )
+  const regions = useMemo(() => paneRegions(innerHeight), [innerHeight])
   const domains = domainsFromState(scales)
-  const activeDistDomain = moduleReady ? domains.dist : distDomain
+  const activeDistDomain = oneCat
+    ? ([0, 1] as [number, number])
+    : moduleReady
+      ? domains.dist
+      : distDomain
   const { popX, sampleX, distX } = useSamplingScales(
     popDomain,
     activeDistDomain.length >= 2 ? activeDistDomain : distDomain,
@@ -176,6 +197,14 @@ export const ProportionThreePaneDisplay = forwardRef<
       innerWidth,
     }),
     [margin.left, plotTop, paneHeight, innerWidth],
+  )
+
+  const sampleGroupBands = useMemo(
+    () =>
+      twoCat && nGroups === 2
+        ? computeSampleTwoGroupBands(innerHeight, groupLevels)
+        : [],
+    [twoCat, nGroups, innerHeight, groupLevels],
   )
 
   useImperativeHandle(
@@ -195,7 +224,17 @@ export const ProportionThreePaneDisplay = forwardRef<
       statKind,
       populationCategory,
       populationGroup,
+      groupLevels,
+      groupStats,
       categoryLabels: catLabels,
+      sampleGroupBands,
+      innerWidth,
+      innerHeight,
+      distBaselineY: regions.distBaselineY,
+      dotRadius: DOT_RADIUS,
+      boxTop: regions.boxTop,
+      boxAreaHeight: regions.boxAreaHeight,
+      statZoneTop: regions.statZoneTop,
     }),
     [
       paneLayout,
@@ -207,7 +246,13 @@ export const ProportionThreePaneDisplay = forwardRef<
       statKind,
       populationCategory,
       populationGroup,
+      groupLevels,
+      groupStats,
       catLabels,
+      sampleGroupBands,
+      innerWidth,
+      innerHeight,
+      regions,
     ],
   )
 
@@ -248,6 +293,11 @@ export const ProportionThreePaneDisplay = forwardRef<
         catLabels,
         showPopulationStat,
         innerHeight,
+        {
+          showDiffSummary: nGroups === 2,
+          statKind: (statKind || 'difference') as StatKind,
+          dotStyle: 'outline',
+        },
       )
     }
   }, [
@@ -264,18 +314,35 @@ export const ProportionThreePaneDisplay = forwardRef<
     populationStat,
     catLabels,
     nGroups,
+    statKind,
   ])
 
   useEffect(() => {
     const sampleG = sampleGroupRef.current
     const distG = distGroupRef.current
     const distRefG = distRefGroupRef.current
+    const flyG = flyGroupRef.current
     if (!sampleG || !distG) return
+    // Drop sample / dist / fly leftovers whenever layout mode changes or
+    // Confirm is cleared — otherwise two_cat diff artifacts linger on one_cat.
     if (moduleReady) return
     d3.select(sampleG).selectAll('*').remove()
     d3.select(distG).selectAll('*').remove()
     if (distRefG) d3.select(distRefG).selectAll('*').remove()
-  }, [moduleReady, innerWidth])
+    if (flyG) d3.select(flyG).selectAll('*').remove()
+  }, [moduleReady, innerWidth, oneCat, twoCat, nGroups])
+
+  // Hard-clear sample/dist when switching one_cat ↔ two_cat even if still "ready"
+  // (e.g. mid-session variable change before the ready flag flips).
+  useEffect(() => {
+    const sampleG = sampleGroupRef.current
+    const distG = distGroupRef.current
+    const flyG = flyGroupRef.current
+    if (!sampleG) return
+    d3.select(sampleG).selectAll('*').remove()
+    if (distG) d3.select(distG).selectAll('.dist-dot, .dist-transient-arrow').remove()
+    if (flyG) d3.select(flyG).selectAll('*').remove()
+  }, [oneCat, twoCat, nGroups, variableSupport])
 
   useEffect(() => {
     const g = distRefGroupRef.current

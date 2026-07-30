@@ -124,6 +124,8 @@ export type SampleAnimationTiming = {
   sampleCompletePauseMs: number
   /** Duration of the slide from P1 down to P2. */
   slideToSampleMs: number
+  /** After landing in P2, duration to restack into neat rows/cols. */
+  restackSampleMs: number
   /** Pause after showing sample statistic(s) in P2. */
   statDisplayPauseMs: number
   /** K=2: animate dotted drop lines to the diff axis. */
@@ -160,6 +162,7 @@ export const DEFAULT_SAMPLE_ANIMATION_TIMING: SampleAnimationTiming = {
   pointHighlightFastMs: 50,
   sampleCompletePauseMs: 1000,
   slideToSampleMs: 2000,
+  restackSampleMs: 800,
   statDisplayPauseMs: 1000,
   twoGroupDropLineMs: 1000,
   twoGroupPreArrowPauseMs: 500,

@@ -15,6 +15,12 @@ import {
   type AnimSignal,
 } from '../d3/animateSample'
 import {
+  animateOneProportionSample,
+  animateTwoCatProportionSample,
+  animateProportionSampleBatch,
+  clearProportionAnimationLayers,
+} from '../d3/animateProportionSample'
+import {
   getSampleIndices,
   DEFAULT_SAMPLE_ANIMATION_TIMING,
   M1000_BATCH,
@@ -27,14 +33,16 @@ import {
   type MValue,
   type SampleAnimationTiming,
 } from '../types'
-import { parseSamplingStatistic } from '../statistics'
 import type { SamplingVariationState } from '../../rserve/vit.types'
 import { ensureDistLayout, useDistLayout } from './useDistLayout'
 import type { ThreePaneHandle } from '../ThreePaneDisplay'
+import { isProportionHandle, type PaneHandle } from '../paneHandle'
+
+export type { PaneHandle } from '../paneHandle'
 
 export function useAnimationController(
   state: SamplingVariationState | undefined,
-  paneRef: RefObject<ThreePaneHandle | null>,
+  paneRef: RefObject<PaneHandle | null>,
   inferenceActive: boolean,
 ) {
   const [cursor, setCursor] = useState(0)
@@ -56,16 +64,25 @@ export function useAnimationController(
     setCursor(0)
     setPhase('idle')
     const handle = paneRef.current
-    if (handle) {
-      clearAllAnimationLayers(
+    if (!handle) return
+    if (isProportionHandle(handle)) {
+      clearProportionAnimationLayers(
         handle.popGroup,
         handle.sampleGroup,
-        handle.distGroup,
         handle.flyGroup,
+        handle.distGroup,
         false,
-        handle.numCatMode,
       )
+      return
     }
+    clearAllAnimationLayers(
+      handle.popGroup,
+      handle.sampleGroup,
+      handle.distGroup,
+      handle.flyGroup,
+      false,
+      handle.numCatMode,
+    )
   }, [paneRef])
 
   useEffect(() => {
@@ -79,13 +96,178 @@ export function useAnimationController(
       const handle = paneRef.current
       if (!handle || !state || state.status !== 'ready') return
 
-      const population = toNumberArray(state.population)
-      const populationGroup = toIntArray(state.population_group)
       const sampleStats = toNumberArray(state.sample_stats)
       const sampleSize = state.sample_size ?? 20
       const indices = state.sample_indices
-      const statistic = parseSamplingStatistic(state.statistic)
       if (!indices || sampleStats.length === 0) return
+
+      const signal = createAnimSignal()
+      signalRef.current = signal
+      setPhase('playing')
+
+      const start = cursor
+      const end = Math.min(start + m, sampleStats.length)
+      const accumulateOnly = m === 1000
+      const includeDist = mode === 'distribution'
+      const timingMs = m === 1000 ? m1000StepMs(start, end) : timingForM(m)
+
+      if (isProportionHandle(handle)) {
+        const oneCat = handle.variableSupport === 'one_cat'
+        const twoCatK2 =
+          handle.variableSupport === 'two_cat' && handle.nGroups === 2
+        // cat×cat with k≥3 still deferred.
+        if (!oneCat && !twoCatK2) {
+          if (!signal.aborted) setCursor(end)
+          setPhase('idle')
+          signalRef.current = null
+          return
+        }
+        const populationCategory =
+          handle.populationCategory.length > 0
+            ? handle.populationCategory
+            : toIntArray(state.population_category)
+        const populationGroup =
+          handle.populationGroup.length > 0
+            ? handle.populationGroup
+            : toIntArray(state.population_group)
+
+        const distLayout = ensureDistLayout(
+          state,
+          handle,
+          distLayoutRef,
+          distLayoutKeyRef,
+        )
+
+        if (m === 1000) {
+          let r = start
+          while (r < end && !signal.aborted) {
+            const batchEnd = Math.min(r + M1000_BATCH, end)
+            const batchReps = []
+            for (let i = r; i < batchEnd; i++) {
+              batchReps.push({
+                replicateIndex: i,
+                sampleStat: sampleStats[i]!,
+                sampleIndices: getSampleIndices(indices, sampleSize, i),
+              })
+            }
+            await animateProportionSampleBatch({
+              popGroup: handle.popGroup,
+              sampleGroup: handle.sampleGroup,
+              distGroup: handle.distGroup,
+              flyGroup: handle.flyGroup,
+              populationCategory,
+              populationGroup,
+              groupLevels: handle.groupLevels,
+              groupBands: handle.sampleGroupBands,
+              nGroups: handle.nGroups,
+              statKind: (handle.statKind || '') as
+                | 'difference'
+                | 'ratio'
+                | 'average_deviation'
+                | '',
+              sampleX: handle.sampleX,
+              distX: handle.distX,
+              distLayout,
+              categoryLabels: handle.categoryLabels,
+              innerWidth: handle.innerWidth,
+              innerHeight: handle.innerHeight,
+              distBaselineY: handle.distBaselineY,
+              dotRadius: handle.dotRadius,
+              signal,
+              timingMs,
+              includeDist,
+              reps: batchReps,
+              resetPane: r === start && start === 0,
+            })
+            r = batchEnd
+          }
+        } else if (twoCatK2) {
+          for (let r = start; r < end; r++) {
+            if (signal.aborted) break
+            const sampleIndices = getSampleIndices(indices, sampleSize, r)
+            await animateTwoCatProportionSample({
+              popGroup: handle.popGroup,
+              sampleGroup: handle.sampleGroup,
+              distGroup: handle.distGroup,
+              flyGroup: handle.flyGroup,
+              paneLayout: handle.paneLayout,
+              populationCategory,
+              populationGroup,
+              groupLevels: handle.groupLevels,
+              groupBands: handle.sampleGroupBands,
+              nGroups: handle.nGroups,
+              statKind: (handle.statKind || 'difference') as
+                | 'difference'
+                | 'ratio'
+                | 'average_deviation'
+                | '',
+              sampleIndices,
+              sampleStat: sampleStats[r]!,
+              sampleX: handle.sampleX,
+              distX: handle.distX,
+              distLayout,
+              categoryLabels: handle.categoryLabels,
+              innerWidth: handle.innerWidth,
+              innerHeight: handle.innerHeight,
+              distBaselineY: handle.distBaselineY,
+              dotRadius: handle.dotRadius,
+              boxTop: handle.boxTop,
+              boxAreaHeight: handle.boxAreaHeight,
+              statZoneTop: handle.statZoneTop,
+              populationStat: state.population_stat ?? 0,
+              signal,
+              timingMs,
+              sampleTiming,
+              includeDist,
+              replicateIndex: r,
+              m,
+            })
+          }
+        } else {
+          for (let r = start; r < end; r++) {
+            if (signal.aborted) break
+            const sampleIndices = getSampleIndices(indices, sampleSize, r)
+            await animateOneProportionSample({
+              popGroup: handle.popGroup,
+              sampleGroup: handle.sampleGroup,
+              distGroup: handle.distGroup,
+              flyGroup: handle.flyGroup,
+              paneLayout: handle.paneLayout,
+              populationCategory,
+              sampleIndices,
+              sampleStat: sampleStats[r]!,
+              sampleX: handle.sampleX,
+              distX: handle.distX,
+              distLayout,
+              categoryLabels: handle.categoryLabels,
+              innerWidth: handle.innerWidth,
+              innerHeight: handle.innerHeight,
+              distBaselineY: handle.distBaselineY,
+              dotRadius: handle.dotRadius,
+              boxTop: handle.boxTop,
+              boxAreaHeight: handle.boxAreaHeight,
+              statZoneTop: handle.statZoneTop,
+              populationStat: state.population_stat ?? 0,
+              signal,
+              timingMs,
+              sampleTiming,
+              includeDist,
+              replicateIndex: r,
+              m,
+            })
+          }
+        }
+
+        if (!signal.aborted) {
+          setCursor(end)
+        }
+        setPhase('idle')
+        signalRef.current = null
+        return
+      }
+
+      const population = toNumberArray(state.population)
+      const populationGroup = toIntArray(state.population_group)
 
       const distLayout = ensureDistLayout(
         state,
@@ -94,16 +276,7 @@ export function useAnimationController(
         distLayoutKeyRef,
       )
 
-      const signal = createAnimSignal()
-      signalRef.current = signal
-      setPhase('playing')
-
-      const start = cursor
-      const end = Math.min(start + m, sampleStats.length)
       const fullAnimation = m < 20
-      const accumulateOnly = m === 1000
-      const includeDist = mode === 'distribution'
-      const timingMs = m === 1000 ? m1000StepMs(start, end) : timingForM(m)
 
       const runOne = async (repIndex: number) => {
         const sampleIndices = getSampleIndices(indices, sampleSize, repIndex)
@@ -141,7 +314,11 @@ export function useAnimationController(
           groupBands: handle.sampleGroupBands,
           nGroups: handle.nGroups,
           statistic: handle.statistic,
-          statKind: (handle.statKind || '') as 'difference' | 'ratio' | 'average_deviation' | '',
+          statKind: (handle.statKind || '') as
+            | 'difference'
+            | 'ratio'
+            | 'average_deviation'
+            | '',
           paneInnerHeight: handle.paneInnerHeight,
           populationGrandStat: handle.grandMean,
           populationStat: state.population_stat ?? 0,
@@ -188,7 +365,11 @@ export function useAnimationController(
             groupBands: handle.sampleGroupBands,
             nGroups: handle.nGroups,
             statistic: handle.statistic,
-            statKind: (handle.statKind || '') as 'difference' | 'ratio' | 'average_deviation' | '',
+            statKind: (handle.statKind || '') as
+              | 'difference'
+              | 'ratio'
+              | 'average_deviation'
+              | '',
             paneInnerHeight: handle.paneInnerHeight,
             populationGrandStat: handle.grandMean,
             populationStat: state.population_stat ?? 0,
@@ -209,7 +390,7 @@ export function useAnimationController(
       setPhase('idle')
       signalRef.current = null
     },
-    [cursor, paneRef, state, sampleTiming],
+    [cursor, paneRef, state, sampleTiming, distLayoutRef, distLayoutKeyRef],
   )
 
   const onGo = useCallback(
@@ -236,18 +417,27 @@ export function useAnimationController(
     signalRef.current = null
     setPhase('idle')
     const handle = paneRef.current
-    if (handle) {
-      clearSampleTransient(handle.sampleGroup)
-      clearFlyLayer(handle.flyGroup)
-      clearAllAnimationLayers(
+    if (!handle) return
+    if (isProportionHandle(handle)) {
+      clearProportionAnimationLayers(
         handle.popGroup,
         handle.sampleGroup,
-        handle.distGroup,
         handle.flyGroup,
+        handle.distGroup,
         true,
-        handle.numCatMode,
       )
+      return
     }
+    clearSampleTransient(handle.sampleGroup)
+    clearFlyLayer(handle.flyGroup)
+    clearAllAnimationLayers(
+      handle.popGroup,
+      handle.sampleGroup,
+      handle.distGroup,
+      handle.flyGroup,
+      true,
+      handle.numCatMode,
+    )
   }, [paneRef])
 
   const onReset = useCallback(() => {

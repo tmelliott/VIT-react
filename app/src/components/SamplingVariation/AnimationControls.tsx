@@ -101,6 +101,8 @@ export function AnimationControls({
 }: AnimationControlsProps) {
   const playing = phase === 'playing'
   const paused = phase === 'paused'
+  // Mobile + desktop docks both mount; unique names avoid colliding radio groups.
+  const nameSuffix = compact ? 'mobile' : 'desktop'
 
   return (
     <div
@@ -118,7 +120,7 @@ export function AnimationControls({
       <div className="flex flex-col gap-3">
         <MGoRow
           label="Sampling"
-          name="sampling-m"
+          name={`sampling-m-${nameSuffix}`}
           value={samplingM}
           onChange={onSamplingMChange}
           onGo={() => onGo('sampling')}
@@ -126,7 +128,7 @@ export function AnimationControls({
         />
         <MGoRow
           label="Sampling distribution"
-          name="dist-m"
+          name={`dist-m-${nameSuffix}`}
           value={distM}
           onChange={onDistMChange}
           onGo={() => onGo('distribution')}

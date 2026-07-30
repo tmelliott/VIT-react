@@ -14,6 +14,14 @@ import {
   unitProportionLayout,
   type UnitProportionLayout,
 } from './proportionLayout'
+import {
+  groupColor,
+  twoGroupDiffZone,
+  type GroupBand,
+} from './groupLayout'
+import { appendTwoGroupPopulationDiffDisplay } from './sampleStatSummary'
+import { STAT_GAP, TRIANGLE_SIZE, TWO_GROUP_DIFF_ZONE_HEIGHT } from './statMarker'
+import type { StatKind } from '../types'
 
 export type UnitProportionOptions = {
   classPrefix?: string
@@ -24,6 +32,21 @@ export type UnitProportionOptions = {
   categoryLabels?: [string, string]
   /** When set, use this layout instead of computing from full pane. */
   layout?: UnitProportionLayout
+  /**
+   * How unit dots are filled.
+   * - `outline` — borders only (population / P1)
+   * - `filled` — solid category colours (sample / P2)
+   */
+  dotStyle?: 'outline' | 'filled'
+  /** Place the p̂ line at the box split or at an explicit proportion value. */
+  statLineAt?: 'split' | 'value'
+  /** When false, draw bars/labels/stat only (no dots) — used mid-animation. */
+  showDots?: boolean
+  /**
+   * Parallel to `encoded`: global population / sample-row indices used for
+   * `data-index` (needed so multi-group charts can highlight by pop index).
+   */
+  indexMap?: number[]
 }
 
 /** @deprecated Alias kept for callers. */
@@ -33,29 +56,142 @@ type DotPlacement = { x: number; y: number; r: number }
 
 const MIN_CELL = 3
 const MAX_CELL = 11
+/** Smallest allowed diameter when squeezing into a narrow box. */
+const MIN_SQUEEZE_CELL = 1.5
+/** Below this width, use a single column of micro-dots. */
+const TINY_WIDTH = 10
 const MAX_DOTS = 500
 
-export type UnitBarPack = {
-  /** Bin / point pitch (width and height of one cell). */
-  cell: number
-  focusCols: number
-  altCols: number
-  /** Shared row count — both bars use this height. */
+/** Per-side (focus / alt) pack inside an exact-width proportion box. */
+export type SidePack = {
+  width: number
+  cols: number
   rows: number
+  /** Dot diameter / grid pitch. */
+  cell: number
+  radius: number
+  /** Left inset so the cols×cell block is centred in the box. */
+  padLeft: number
+  /** True when diameter was reduced to fit a box narrower than the preferred cell. */
+  squeezed: boolean
+}
+
+export type UnitBarPack = {
+  focus: SidePack
+  alt: SidePack
+  /** Exact box widths (sum to plotWidth). */
   focusWidth: number
   altWidth: number
   barHeight: number
+  /** Preferred diameter before per-side squeeze. */
+  cell: number
+  /** @deprecated Prefer pack.focus.cols / pack.alt.cols */
+  focusCols: number
+  /** @deprecated Prefer pack.alt.cols */
+  altCols: number
+  /** Max rows across sides (for callers that expect a shared row count). */
+  rows: number
   radius: number
-  /** Unused strip on the right after quantizing to whole bins. */
+  /** Always 0 — boxes span the full plot width. */
   remainder: number
 }
 
 /**
- * Quantize bar widths to whole bins from the raw proportion, then grow a
- * shared row count until every point fits (L→R, T→B in each bar).
+ * Pack `count` dots into a box of exact `width`.
  *
- * Same height is natural when widths ∝ counts: both sides need ≈ n / totalCols
- * rows; we take the max so rounding never leaves unequal boxes.
+ * cols = floor(width / cell); leftover width is centred as side padding.
+ * If width < preferredCell, squeeze (½ / ¼ diameter, or a single micro column
+ * when width < {@link TINY_WIDTH}).
+ */
+export function packSide(
+  width: number,
+  count: number,
+  preferredCell: number,
+  maxHeight: number,
+): SidePack {
+  const empty = (cell: number): SidePack => ({
+    width: Math.max(0, width),
+    cols: 0,
+    rows: 0,
+    cell,
+    radius: cell / 2,
+    padLeft: 0,
+    squeezed: false,
+  })
+
+  if (count <= 0 || width <= 0 || maxHeight <= 0) {
+    return empty(Math.max(MIN_SQUEEZE_CELL, preferredCell))
+  }
+
+  const n = Math.min(count, MAX_DOTS)
+  let cell = preferredCell
+  let squeezed = false
+  let forceCols: number | null = null
+
+  if (width < cell) {
+    squeezed = true
+    if (width < TINY_WIDTH) {
+      // Single column of micro-dots.
+      cell = Math.max(MIN_SQUEEZE_CELL, Math.min(width, preferredCell / 4))
+      forceCols = 1
+    } else {
+      // Prefer two columns at half-width; fall back to quarter / one col.
+      const half = width / 2
+      const quarter = width / 4
+      if (half >= MIN_SQUEEZE_CELL) {
+        cell = half
+        forceCols = 2
+      } else if (quarter >= MIN_SQUEEZE_CELL) {
+        cell = quarter
+      } else {
+        cell = Math.max(MIN_SQUEEZE_CELL, width)
+        forceCols = 1
+      }
+    }
+    cell = Math.min(cell, width)
+  }
+
+  let cols =
+    forceCols != null
+      ? forceCols
+      : Math.max(1, Math.floor(width / cell))
+  // Keep the grid inside the box if forceCols overshoots.
+  if (cols * cell > width + 1e-9) {
+    cell = width / cols
+  }
+  let rows = Math.ceil(n / cols)
+
+  let guard = 0
+  while (rows * cell > maxHeight + 1e-9 && cell > MIN_SQUEEZE_CELL && guard++ < 100) {
+    cell = Math.max(MIN_SQUEEZE_CELL, cell - 0.25)
+    squeezed = true
+    if (forceCols != null) {
+      cols = forceCols
+      if (cols * cell > width + 1e-9) cell = width / cols
+    } else {
+      cols = Math.max(1, Math.floor(width / cell))
+    }
+    rows = Math.ceil(n / cols)
+  }
+
+  const maxRows = Math.max(1, Math.floor(maxHeight / Math.max(cell, 1e-6)))
+  if (rows > maxRows) rows = maxRows
+
+  const padLeft = Math.max(0, (width - cols * cell) / 2)
+  return {
+    width,
+    cols,
+    rows,
+    cell,
+    radius: cell / 2,
+    padLeft,
+    squeezed,
+  }
+}
+
+/**
+ * Exact proportional box widths; dots pack independently in each box
+ * (shared preferred diameter, per-side squeeze / padding).
  */
 export function packUnitBars(
   plotWidth: number,
@@ -67,59 +203,77 @@ export function packUnitBars(
   if (n <= 0 || plotWidth <= 0 || maxHeight <= 0) return null
 
   const prop = nFocus / n
-  const showFocus = nFocus > 0
-  const showAlt = nAlt > 0
+  const focusWidth = plotWidth * prop
+  const altWidth = plotWidth - focusWidth
 
-  const tryCell = (cell: number): UnitBarPack | null => {
-    const totalCols = Math.floor(plotWidth / cell)
-    if (totalCols < (showFocus && showAlt ? 2 : 1)) return null
-
-    let focusCols: number
-    let altCols: number
-    if (!showFocus) {
-      focusCols = 0
-      altCols = totalCols
-    } else if (!showAlt) {
-      focusCols = totalCols
-      altCols = 0
-    } else {
-      focusCols = Math.round(prop * totalCols)
-      focusCols = Math.max(1, Math.min(totalCols - 1, focusCols))
-      altCols = totalCols - focusCols
-    }
-
-    const rowsFocus =
-      focusCols > 0 ? Math.ceil(Math.min(nFocus, MAX_DOTS) / focusCols) : 0
-    const rowsAlt =
-      altCols > 0 ? Math.ceil(Math.min(nAlt, MAX_DOTS) / altCols) : 0
-    const rows = Math.max(rowsFocus, rowsAlt, 1)
-    if (rows * cell > maxHeight) return null
-
+  const build = (preferred: number): UnitBarPack => {
+    const focus = packSide(focusWidth, nFocus, preferred, maxHeight)
+    const alt = packSide(altWidth, nAlt, preferred, maxHeight)
+    const contentH = Math.max(
+      focus.cols > 0 ? focus.rows * focus.cell : 0,
+      alt.cols > 0 ? alt.rows * alt.cell : 0,
+      1,
+    )
     return {
-      cell,
-      focusCols,
-      altCols,
-      rows,
-      focusWidth: focusCols * cell,
-      altWidth: altCols * cell,
-      barHeight: rows * cell,
-      radius: cell / 2,
-      remainder: plotWidth - totalCols * cell,
+      focus,
+      alt,
+      focusWidth,
+      altWidth,
+      barHeight: Math.min(maxHeight, contentH),
+      cell: preferred,
+      focusCols: focus.cols,
+      altCols: alt.cols,
+      rows: Math.max(focus.rows, alt.rows, 1),
+      radius: preferred / 2,
+      remainder: 0,
     }
   }
 
-  // Largest comfortable bin that fits the height budget.
-  for (let cell = MAX_CELL; cell >= MIN_CELL - 1e-9; cell -= 0.25) {
-    const pack = tryCell(cell)
-    if (pack) return pack
+  for (let preferred = MAX_CELL; preferred >= MIN_CELL - 1e-9; preferred -= 0.25) {
+    const pack = build(preferred)
+    const need = Math.max(
+      pack.focus.cols > 0 ? pack.focus.rows * pack.focus.cell : 0,
+      pack.alt.cols > 0 ? pack.alt.rows * pack.alt.cell : 0,
+    )
+    if (need <= maxHeight + 1e-6) return pack
   }
-  return tryCell(MIN_CELL)
+  return build(MIN_CELL)
+}
+
+/**
+ * Place dots in a side pack: L→R, T→B, centred horizontally via padLeft and
+ * vertically within `barHeight`.
+ */
+export function placeInSide(
+  xStart: number,
+  yTop: number,
+  side: SidePack,
+  count: number,
+  barHeight: number,
+): DotPlacement[] {
+  if (side.cols <= 0 || count <= 0 || side.cell <= 0) return []
+  const n = Math.min(count, MAX_DOTS, side.cols * side.rows)
+  const r = side.radius
+  const gridH = side.rows * side.cell
+  const y0 = yTop + Math.max(0, (barHeight - gridH) / 2)
+  const positions: DotPlacement[] = []
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / side.cols)
+    const col = i % side.cols
+    positions.push({
+      x: xStart + side.padLeft + col * side.cell + r,
+      y: y0 + row * side.cell + r,
+      r,
+    })
+  }
+  return positions
 }
 
 /**
  * Fill `count` points left→right, top→bottom into a `cols × rows` grid.
+ * @deprecated Prefer {@link placeInSide} for proportion boxes.
  */
-function placeInBins(
+export function placeInBins(
   xStart: number,
   yTop: number,
   cols: number,
@@ -141,6 +295,99 @@ function placeInBins(
     })
   }
   return positions
+}
+
+export type UnitBarGeometry = {
+  pack: UnitBarPack
+  focusX: number
+  altX: number
+  focusW: number
+  altW: number
+  bandTop: number
+  barH: number
+  labelY: number
+  statY: number
+  splitX: number
+  prop: number
+  nFocus: number
+  nAlt: number
+  focusIndices: number[]
+  altIndices: number[]
+  /** data-index → placement inside the packed bars */
+  placements: Map<number, DotPlacement & { isFocus: boolean }>
+}
+
+/** Shared packing / placement math used by the drawer and the sample animation. */
+export function computeUnitBarGeometry(
+  encoded: number[],
+  innerWidth: number,
+  innerHeight: number,
+  xScale: d3.ScaleLinear<number, number>,
+  layoutOpt?: UnitProportionLayout,
+  indexMap?: number[],
+): UnitBarGeometry | null {
+  const n = encoded.length
+  if (n === 0 || innerWidth <= 0 || innerHeight <= 0) return null
+
+  const focusIndices: number[] = []
+  const altIndices: number[] = []
+  for (let i = 0; i < encoded.length; i++) {
+    const dataIdx = indexMap?.[i] ?? i
+    if (encoded[i] === 0) focusIndices.push(dataIdx)
+    else altIndices.push(dataIdx)
+  }
+
+  const nFocus = focusIndices.length
+  const nAlt = altIndices.length
+  const prop = nFocus / n
+  const layout = layoutOpt ?? unitProportionLayout(innerHeight)
+
+  const x0 = xScale(0)!
+  const x1 = xScale(1)!
+  const plotWidth = Math.max(0, x1 - x0)
+  const pack = packUnitBars(plotWidth, Math.max(0, layout.barHeight), nFocus, nAlt)
+  if (!pack) return null
+
+  // Boxes span the full [0, 1] axis exactly — split matches the count proportion.
+  const focusX = x0
+  const focusW = pack.focusWidth
+  const altX = x0 + focusW
+  const altW = pack.altWidth
+  const barH = pack.barHeight
+  const bandTop =
+    layout.barTop + Math.max(0, (layout.barHeight - barH) / 2)
+
+  const focusPlaces = placeInSide(focusX, bandTop, pack.focus, nFocus, barH)
+  const altPlaces = placeInSide(altX, bandTop, pack.alt, nAlt, barH)
+
+  const placements = new Map<number, DotPlacement & { isFocus: boolean }>()
+  for (let i = 0; i < focusPlaces.length; i++) {
+    const idx = focusIndices[i]!
+    placements.set(idx, { ...focusPlaces[i]!, isFocus: true })
+  }
+  for (let i = 0; i < altPlaces.length; i++) {
+    const idx = altIndices[i]!
+    placements.set(idx, { ...altPlaces[i]!, isFocus: false })
+  }
+
+  return {
+    pack,
+    focusX,
+    altX,
+    focusW,
+    altW,
+    bandTop,
+    barH,
+    labelY: bandTop + barH + 14,
+    statY: bandTop - 8,
+    splitX: altX,
+    prop,
+    nFocus,
+    nAlt,
+    focusIndices,
+    altIndices,
+    placements,
+  }
 }
 
 /**
@@ -197,24 +444,74 @@ function drawSegmentDots(
   fill: string,
   stroke: string,
   classPrefix: string,
-  openRing: boolean,
+  style: 'outline' | 'filled',
+  isFocus: boolean,
 ) {
   for (let i = 0; i < placements.length; i++) {
     const p = placements[i]!
+    const outlineStroke = p.r < 2.5 ? Math.max(0.4, p.r * 0.45) : 1.5
     const circle = g
       .append('circle')
       .attr('class', `${classPrefix}-dot`)
       .attr('data-index', indices[i] ?? i)
+      .attr('data-focus', isFocus ? '1' : '0')
       .attr('cx', p.x)
       .attr('cy', p.y)
       .attr('r', p.r)
       .attr('stroke', stroke)
-      .attr('stroke-width', openRing ? 1.2 : 0.5)
-    if (openRing) {
-      circle.attr('fill', '#fff').attr('fill-opacity', 1)
+      .attr('stroke-width', style === 'outline' ? outlineStroke : 0.5)
+    if (style === 'outline') {
+      circle.attr('fill', 'none').attr('fill-opacity', 1)
     } else {
       circle.attr('fill', fill).attr('fill-opacity', 0.95)
     }
+  }
+}
+
+/** Reset all unit dots in a proportion chart to outline-only. */
+export function resetProportionDotsOutline(parent: SVGGElement) {
+  d3.select(parent)
+    .selectAll<SVGCircleElement, unknown>('circle[data-index]')
+    .attr('fill', 'none')
+    .attr('fill-opacity', 1)
+    .attr('stroke-width', function () {
+      const r = Number(this.getAttribute('r') ?? 4)
+      return r < 2.5 ? Math.max(0.4, r * 0.45) : 1.5
+    })
+}
+
+/** Fill sampled population dots in place (P1 highlight). */
+export function fillProportionSampleDots(
+  parent: SVGGElement,
+  sampleIndices: number[],
+  encoded: number[],
+) {
+  const g = d3.select(parent)
+  for (const idx of sampleIndices) {
+    const isFocus = encoded[idx] === 0
+    g.select<SVGCircleElement>(`circle[data-index="${idx}"]`)
+      .attr('fill', isFocus ? PROP_FOCUS_COLOR : PROP_ALT_STROKE)
+      .attr('fill-opacity', 0.95)
+      .attr('stroke', isFocus ? PROP_FOCUS_STROKE : PROP_ALT_STROKE)
+      .attr('stroke-width', 0.5)
+      .raise()
+  }
+}
+
+/** Read current local (cx, cy, r) for a proportion dot by data-index. */
+export function readProportionDotPosition(
+  parent: SVGGElement,
+  index: number,
+): DotPlacement | null {
+  const node = d3
+    .select(parent)
+    .select<SVGCircleElement>(`circle[data-index="${index}"]`)
+    .node()
+  if (!node) return null
+  return {
+    x: Number(node.getAttribute('cx')),
+    y: Number(node.getAttribute('cy')),
+    r: Number(node.getAttribute('r')),
   }
 }
 
@@ -302,6 +599,10 @@ export function drawHybridProportionChart(
     groupLabel,
     categoryLabels = ['Focus', 'Other'],
     layout: layoutOpt,
+    dotStyle = 'outline',
+    statLineAt = 'split',
+    showDots = true,
+    indexMap,
   } = options
 
   const g = d3.select(parent)
@@ -310,20 +611,37 @@ export function drawHybridProportionChart(
   const n = encoded.length
   if (n === 0 || innerWidth <= 0 || innerHeight <= 0) return
 
-  const focusIndices: number[] = []
-  const altIndices: number[] = []
-  for (let i = 0; i < encoded.length; i++) {
-    if (encoded[i] === 0) focusIndices.push(i)
-    else altIndices.push(i)
-  }
+  const geom = computeUnitBarGeometry(
+    encoded,
+    innerWidth,
+    innerHeight,
+    xScale,
+    layoutOpt,
+    indexMap,
+  )
+  if (!geom) return
 
-  const nFocus = focusIndices.length
-  const nAlt = altIndices.length
-  const prop = nFocus / n
+  const {
+    pack,
+    focusX,
+    altX,
+    focusW,
+    altW,
+    bandTop,
+    barH,
+    labelY,
+    statY,
+    splitX,
+    prop,
+    nFocus,
+    nAlt,
+    focusIndices,
+    altIndices,
+  } = geom
+
   const lineValue = statValue ?? prop
   const focusLabel = categoryLabels[0] ?? 'Focus'
   const altLabel = categoryLabels[1] ?? 'Other'
-
   const layout = layoutOpt ?? unitProportionLayout(innerHeight)
   const hatchId = `${classPrefix}-alt-hatch`
   ensureAltHatch(g, hatchId)
@@ -363,9 +681,9 @@ export function drawHybridProportionChart(
       .attr('cx', 5)
       .attr('cy', 0)
       .attr('r', 4)
-      .attr('fill', PROP_FOCUS_COLOR)
+      .attr('fill', 'none')
       .attr('stroke', PROP_FOCUS_STROKE)
-      .attr('stroke-width', 0.5)
+      .attr('stroke-width', 1.5)
     legend
       .append('text')
       .attr('x', 12)
@@ -375,48 +693,24 @@ export function drawHybridProportionChart(
       .attr('fill', PROP_LABEL)
       .text(focusLabel)
 
-    const altX = Math.min(innerWidth * 0.42, 12 + focusLabel.length * 7 + 28)
+    const altLegendX = Math.min(innerWidth * 0.42, 12 + focusLabel.length * 7 + 28)
     legend
       .append('circle')
-      .attr('cx', altX)
+      .attr('cx', altLegendX)
       .attr('cy', 0)
       .attr('r', 4)
-      .attr('fill', '#fff')
+      .attr('fill', 'none')
       .attr('stroke', PROP_ALT_STROKE)
-      .attr('stroke-width', 1.2)
+      .attr('stroke-width', 1.5)
     legend
       .append('text')
-      .attr('x', altX + 7)
+      .attr('x', altLegendX + 7)
       .attr('y', 0)
       .attr('dominant-baseline', 'central')
       .attr('font-size', 11)
       .attr('fill', PROP_LABEL)
       .text(altLabel)
   }
-
-  const x0 = xScale(0)!
-  const x1 = xScale(1)!
-  const plotWidth = Math.max(0, x1 - x0)
-  const maxBarH = Math.max(0, layout.barHeight)
-
-  const pack = packUnitBars(plotWidth, maxBarH, nFocus, nAlt)
-  if (!pack) return
-
-  // Centre the quantized bar block in the axis span (leftover from floor).
-  const blockW = pack.focusWidth + pack.altWidth
-  const blockX = x0 + Math.max(0, (plotWidth - blockW) / 2)
-  const focusX = blockX
-  const focusW = pack.focusWidth
-  const altX = blockX + pack.focusWidth
-  const altW = pack.altWidth
-  const barH = pack.barHeight
-  const bandTop =
-    layout.barTop + Math.max(0, (layout.barHeight - barH) / 2)
-  const labelY = bandTop + barH + 14
-  const statY = bandTop - 8
-  // Visual split (= quantized width); p̂ label uses the true proportion.
-  const splitX = focusX + focusW
-  const trueProp = Number.isFinite(lineValue) ? lineValue : prop
 
   if (focusW > 0) {
     g.append('rect')
@@ -443,24 +737,28 @@ export function drawHybridProportionChart(
       .attr('stroke-width', 1.25)
   }
 
-  drawSegmentDots(
-    g,
-    placeInBins(focusX, bandTop, pack.focusCols, pack.rows, pack.cell, nFocus),
-    focusIndices,
-    PROP_FOCUS_COLOR,
-    PROP_FOCUS_STROKE,
-    classPrefix,
-    false,
-  )
-  drawSegmentDots(
-    g,
-    placeInBins(altX, bandTop, pack.altCols, pack.rows, pack.cell, nAlt),
-    altIndices,
-    PROP_ALT_STROKE,
-    PROP_ALT_STROKE,
-    classPrefix,
-    true,
-  )
+  if (showDots) {
+    drawSegmentDots(
+      g,
+      placeInSide(focusX, bandTop, pack.focus, nFocus, barH),
+      focusIndices,
+      PROP_FOCUS_COLOR,
+      PROP_FOCUS_STROKE,
+      classPrefix,
+      dotStyle,
+      true,
+    )
+    drawSegmentDots(
+      g,
+      placeInSide(altX, bandTop, pack.alt, nAlt, barH),
+      altIndices,
+      PROP_ALT_STROKE,
+      PROP_ALT_STROKE,
+      classPrefix,
+      dotStyle,
+      false,
+    )
+  }
 
   placeSegmentLabel(
     g,
@@ -483,24 +781,26 @@ export function drawHybridProportionChart(
     innerWidth,
   )
 
+  const trueProp = Number.isFinite(lineValue) ? lineValue : prop
   if (showStat && Number.isFinite(trueProp)) {
+    const lineX = statLineAt === 'value' ? xScale(trueProp)! : splitX
     g.append('line')
       .attr('class', `${classPrefix}-stat-line`)
-      .attr('x1', splitX)
-      .attr('x2', splitX)
+      .attr('x1', lineX)
+      .attr('x2', lineX)
       .attr('y1', bandTop - 6)
       .attr('y2', bandTop + barH + 6)
       .attr('stroke', PROP_LABEL)
       .attr('stroke-width', 2)
 
     const label = `p̂ = ${formatProportion(trueProp)}`
-    let labelX = splitX
+    let labelX = lineX
     let anchor: 'start' | 'end' | 'middle' = 'middle'
-    if (splitX < 48) {
-      labelX = splitX + 6
+    if (lineX < 48) {
+      labelX = lineX + 6
       anchor = 'start'
-    } else if (splitX > innerWidth - 48) {
-      labelX = splitX - 6
+    } else if (lineX > innerWidth - 48) {
+      labelX = lineX - 6
       anchor = 'end'
     }
     g.append('text')
@@ -515,12 +815,42 @@ export function drawHybridProportionChart(
   }
 }
 
-/** Clear unit / legacy proportion marks. */
+/** Clear unit / legacy proportion marks (including two-group diff overlays). */
 export function removeProportionBar(parent: SVGGElement, classPrefix = 'prop') {
   const g = d3.select(parent)
   clearUnitBar(g, classPrefix)
   g.selectAll('.prop-group').remove()
   g.selectAll(`[class*="${classPrefix}"]`).remove()
+  // two_cat k=2 population summary — lives on the pane root, not under prop-*
+  g.selectAll(
+    '.pop-stat-drop-line, .pop-stat-drop, .pop-diff-arrow, .pop-diff-label, .pop-avg-dev-label, .pop-grand-mean, .pop-dev-arrow',
+  ).remove()
+}
+
+/** Build GroupBand geometry aligned with multi-group proportion rows (for diff UI). */
+export function proportionGroupBands(
+  innerHeight: number,
+  groupLevels: string[],
+  bottomReserve = 0,
+): GroupBand[] {
+  const rows = multiUnitGroupRows(innerHeight, groupLevels.length, bottomReserve)
+  return groupLevels.map((label, index) => {
+    const row = rows[index]!
+    const layout = unitGroupRowLayout(row.top, row.height, index === 0)
+    return {
+      index,
+      label,
+      top: row.top,
+      height: row.height,
+      dotAreaHeight: row.height,
+      baselineY: layout.barTop + layout.barHeight,
+      statZoneTop: layout.statY - STAT_GAP - TRIANGLE_SIZE,
+      statZoneHeight: STAT_GAP + TRIANGLE_SIZE + 8,
+      boxTop: row.top + row.height,
+      boxAreaHeight: 0,
+      color: groupColor(index),
+    }
+  })
 }
 
 export function drawMultiGroupProportionBars(
@@ -535,18 +865,35 @@ export function drawMultiGroupProportionBars(
   categoryLabels: [string, string],
   showStat = true,
   innerHeight?: number,
+  options: {
+    /** Population difference / ratio arrow under the group rows. */
+    showDiffSummary?: boolean
+    statKind?: StatKind
+    dotStyle?: 'outline' | 'filled'
+  } = {},
 ) {
   removeProportionBar(parent, 'prop')
   const g = d3.select(parent)
-  g.selectAll('.prop-group').remove()
 
   const height = innerHeight ?? 200
-  const rows = multiUnitGroupRows(height, groupLevels.length)
+  const nGroups = groupLevels.length
+  const showDiff =
+    options.showDiffSummary === true &&
+    showStat &&
+    nGroups === 2 &&
+    groupStats.length >= 2
+  const bottomReserve = showDiff ? TWO_GROUP_DIFF_ZONE_HEIGHT : 0
+  const rows = multiUnitGroupRows(height, nGroups, bottomReserve)
+  const bands = proportionGroupBands(height, groupLevels, bottomReserve)
 
-  for (let gi = 0; gi < groupLevels.length; gi++) {
+  for (let gi = 0; gi < nGroups; gi++) {
     const groupEncoded: number[] = []
+    const indexMap: number[] = []
     for (let i = 0; i < encoded.length; i++) {
-      if (populationGroup[i] === gi) groupEncoded.push(encoded[i]!)
+      if (populationGroup[i] === gi) {
+        groupEncoded.push(encoded[i]!)
+        indexMap.push(i)
+      }
     }
     const row = rows[gi]!
     const layout = unitGroupRowLayout(row.top, row.height, gi === 0)
@@ -565,7 +912,22 @@ export function drawMultiGroupProportionBars(
         groupLabel: groupLevels[gi],
         categoryLabels,
         layout,
+        indexMap,
+        dotStyle: options.dotStyle ?? 'outline',
       },
+    )
+  }
+
+  if (showDiff) {
+    appendTwoGroupPopulationDiffDisplay(
+      parent,
+      xScale,
+      groupStats,
+      bands,
+      twoGroupDiffZone(height),
+      'mean',
+      (options.statKind === 'ratio' ? 'ratio' : 'difference') as StatKind,
+      'p̂',
     )
   }
 }

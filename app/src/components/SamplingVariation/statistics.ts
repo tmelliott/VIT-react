@@ -119,13 +119,26 @@ export function twoGroupSummaryLabel(
   stat1: number,
   statistic: SamplingStatistic,
   statKind: 'difference' | 'ratio',
+  /** Override symbol (e.g. `p̂` for proportions). */
+  symbol?: string,
 ): string {
-  const sym = statSymbol(statistic)
+  const sym = symbol ?? statSymbol(statistic)
   if (statKind === 'ratio') {
     if (stat0 === 0) return `${sym}\u2082 / ${sym}\u2081 = —`
     return `${sym}\u2082 / ${sym}\u2081 = ${formatStatValue(stat1 / stat0)}`
   }
   return `${sym}\u2082 \u2212 ${sym}\u2081 = ${formatStatValue(stat1 - stat0)}`
+}
+
+/** Combine two group proportions (or means) into a summary. */
+export function combineGroupProps(
+  p0: number,
+  p1: number,
+  kind: 'difference' | 'ratio' = 'difference',
+): number {
+  if (!Number.isFinite(p0) || !Number.isFinite(p1)) return NaN
+  if (kind === 'ratio') return p0 === 0 ? NaN : p1 / p0
+  return p1 - p0
 }
 
 /** P3 axis anchor for two-group summaries (0 for differences, 1 for ratios). */

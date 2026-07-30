@@ -148,9 +148,10 @@ export function groupedDiffLabelText(
   stat1: number,
   statistic: SamplingStatistic,
   statKind: StatKind = 'difference',
+  symbol?: string,
 ): string {
   const kind = statKind === 'ratio' ? 'ratio' : 'difference'
-  return twoGroupSummaryLabel(stat0, stat1, statistic, kind)
+  return twoGroupSummaryLabel(stat0, stat1, statistic, kind, symbol)
 }
 
 /** Label for K≥3: mean absolute deviation from the overall population statistic. */
@@ -193,6 +194,7 @@ export function appendTwoGroupPopulationDiffDisplay(
   diffZone: TwoGroupDiffZone,
   statistic: SamplingStatistic,
   statKind: StatKind = 'difference',
+  symbol?: string,
 ) {
   if (groupStats.length < 2 || bands.length < 2) return
   const stat0 = groupStats[0]!
@@ -229,7 +231,7 @@ export function appendTwoGroupPopulationDiffDisplay(
     .attr('x', (x0 + x1) / 2)
     .attr('y', diffZone.labelY)
     .attr('text-anchor', 'middle')
-    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind))
+    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind, symbol))
 }
 
 export function appendPopulationDifferenceArrow(
@@ -344,6 +346,7 @@ export async function animateTwoGroupSampleDiffSummary(
   >,
   wait: (ms: number) => Promise<void>,
   aborted: () => boolean,
+  symbol?: string,
 ): Promise<void> {
   if (groupStats.length < 2 || bands.length < 2) return
   const stat0 = groupStats[0]!
@@ -452,7 +455,7 @@ export async function animateTwoGroupSampleDiffSummary(
     .attr('x', (x0 + x1) / 2)
     .attr('y', diffZone.labelY)
     .attr('text-anchor', 'middle')
-    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind))
+    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind, symbol))
 
   const labelFadeMs = Math.min(200, timing.twoGroupArrowMs)
   if (labelFadeMs <= 0) {
@@ -597,6 +600,7 @@ export function appendTwoGroupSampleDiffDisplay(
   statistic: SamplingStatistic,
   replicateIndex: number,
   statKind: StatKind = 'difference',
+  symbol?: string,
 ) {
   if (groupStats.length < 2 || bands.length < 2) return
   const stat0 = groupStats[0]!
@@ -642,7 +646,7 @@ export function appendTwoGroupSampleDiffDisplay(
     .attr('x', (x0 + x1) / 2)
     .attr('y', diffZone.labelY)
     .attr('text-anchor', 'middle')
-    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind))
+    .text(groupedDiffLabelText(stat0, stat1, statistic, statKind, symbol))
 }
 
 /** K≥3 sample deviation markers matching P1 styling (transient overlay). */
