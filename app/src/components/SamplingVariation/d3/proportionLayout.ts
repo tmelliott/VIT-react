@@ -91,15 +91,17 @@ export function multiUnitGroupRows(
   bottomReserve = 0,
 ): { top: number; height: number }[] {
   const gap = 10
+  const n = Math.max(1, nGroups)
   const available = Math.max(60, innerHeight - 4 - Math.max(0, bottomReserve))
-  const rowHeight = Math.max(
-    72,
-    (available - gap * Math.max(0, nGroups - 1)) / Math.max(1, nGroups),
-  )
-  const total = nGroups * rowHeight + gap * Math.max(0, nGroups - 1)
+  const gaps = gap * Math.max(0, n - 1)
+  // Divide evenly so all groups fit; only grow past a comfortable size when
+  // there is spare room (never force a min that overflows and clips C+).
+  const equal = (available - gaps) / n
+  const rowHeight = Math.max(36, equal)
+  const total = n * rowHeight + gaps
   let top = Math.max(0, (available - total) / 2)
   const rows: { top: number; height: number }[] = []
-  for (let i = 0; i < nGroups; i++) {
+  for (let i = 0; i < n; i++) {
     rows.push({ top, height: rowHeight })
     top += rowHeight + gap
   }

@@ -11,6 +11,7 @@ import {
   PROP_ALT_STROKE,
   PROP_FOCUS_COLOR,
   PROP_FOCUS_STROKE,
+  proportionFromEncoded,
   proportionSampleLayout,
   unitGroupRowLayout,
 } from './proportionLayout'
@@ -38,6 +39,8 @@ import {
 } from './animateSample'
 import {
   animateTwoGroupSampleDiffSummary,
+  animateSampleDeviationSummary,
+  appendMultiGroupSampleStatMarkers,
   appendTwoGroupBandSampleStat,
   type StatKind,
 } from './sampleStatSummary'
@@ -148,6 +151,8 @@ export type TwoCatProportionSampleAnimContext = ProportionSampleAnimContext & {
   groupBands: GroupBand[]
   nGroups: number
   statKind: StatKind
+  /** Overall population focus proportion (k≥3 average-deviation centre). */
+  populationGrandProp: number
 }
 
 /** Per-group focus proportions for a sample. */
@@ -318,15 +323,21 @@ function clearSampleProportionDisplay(sampleGroup: SVGGElement) {
         '.sample-stat-label',
         '.sample-stat-line:not([data-group])',
         '.sample-stat-drop-line',
+        '.sample-stat-drop',
+        '.sample-stat-vline',
         '.sample-diff-label',
+        '.sample-avg-dev-label',
+        '.sample-grand-mean',
         '.sample-summary-arrow',
         '.sample-diff-arrow',
+        '.sample-dev-arrow',
       ].join(', '),
     )
     .remove()
 }
 
-function drawTwoCatSampleProportionCharts(
+/** Draw per-group hybrid sample charts; k=2 also places mean-strip markers. */
+function drawMultiGroupSampleProportionCharts(
   sampleGroup: SVGGElement,
   sampleIndices: number[],
   populationCategory: number[],
@@ -339,11 +350,12 @@ function drawTwoCatSampleProportionCharts(
   categoryLabels: [string, string],
   replicateIndex: number,
   current = true,
+  withTwoGroupMarkers = false,
 ) {
   clearSampleProportionDisplay(sampleGroup)
   const root = d3.select(sampleGroup)
 
-  for (const band of groupBands.slice(0, 2)) {
+  for (const band of groupBands) {
     const indexMap: number[] = []
     const groupEncoded: number[] = []
     for (const popIdx of sampleIndices) {
@@ -377,17 +389,19 @@ function drawTwoCatSampleProportionCharts(
         statLineAt: 'value',
       },
     )
-    const prop = groupProps[band.index]
-    if (prop != null && Number.isFinite(prop)) {
-      appendTwoGroupBandSampleStat(
-        sampleGroup,
-        sampleX,
-        prop,
-        band,
-        'mean',
-        replicateIndex,
-        current,
-      )
+    if (withTwoGroupMarkers) {
+      const prop = groupProps[band.index]
+      if (prop != null && Number.isFinite(prop)) {
+        appendTwoGroupBandSampleStat(
+          sampleGroup,
+          sampleX,
+          prop,
+          band,
+          'mean',
+          replicateIndex,
+          current,
+        )
+      }
     }
   }
 }
@@ -401,7 +415,7 @@ function twoCatGroupGeometries(
   innerWidth: number,
 ): Map<number, { x: number; y: number; r: number }> {
   const out = new Map<number, { x: number; y: number; r: number }>()
-  for (const band of groupBands.slice(0, 2)) {
+  for (const band of groupBands) {
     const indexMap: number[] = []
     const groupEncoded: number[] = []
     for (const popIdx of sampleIndices) {
@@ -482,7 +496,8 @@ export async function animateProportionSampleBatch(
   const lastRep = reps[reps.length - 1]!
   const priorReps = reps.slice(0, -1)
   const { barcodeTop, barcodeBottom } = proportionBarcodeYs(innerHeight)
-  const twoCat = nGroups === 2 && groupBands.length >= 2
+  const twoCatK2 = nGroups === 2 && groupBands.length >= 2
+  const twoCatK3 = nGroups >= 3 && groupBands.length >= 3
 
   if (resetPane) {
     clearSampleProportionDisplay(sampleGroup)
@@ -498,7 +513,7 @@ export async function animateProportionSampleBatch(
   clearFlyLayer(flyGroup)
   resetProportionDotsOutline(popGroup)
 
-  if (twoCat) {
+  if (twoCatK2 || twoCatK3) {
     for (const rep of priorReps) {
       const props = sampleGroupProportions(
         rep.sampleIndices,
@@ -506,18 +521,31 @@ export async function animateProportionSampleBatch(
         populationGroup,
         nGroups,
       )
-      for (const band of groupBands.slice(0, 2)) {
-        const prop = props[band.index]
-        if (prop == null || !Number.isFinite(prop)) continue
-        appendTwoGroupBandSampleStat(
+      if (twoCatK2) {
+        for (const band of groupBands.slice(0, 2)) {
+          const prop = props[band.index]
+          if (prop == null || !Number.isFinite(prop)) continue
+          appendTwoGroupBandSampleStat(
+            sampleGroup,
+            sampleX,
+            prop,
+            band,
+            'mean',
+            rep.replicateIndex,
+            false,
+          )
+        }
+      } else {
+        appendMultiGroupSampleStatMarkers(
           sampleGroup,
           sampleX,
-          prop,
-          band,
-          'mean',
+          props,
+          groupBands,
           rep.replicateIndex,
-          false,
         )
+        d3.select(sampleGroup)
+          .selectAll(`.sample-stat-line[data-index="${rep.replicateIndex}"]`)
+          .attr('stroke-opacity', PREVIOUS_STAT_OPACITY)
       }
     }
     const lastProps = sampleGroupProportions(
@@ -526,7 +554,7 @@ export async function animateProportionSampleBatch(
       populationGroup,
       nGroups,
     )
-    drawTwoCatSampleProportionCharts(
+    drawMultiGroupSampleProportionCharts(
       sampleGroup,
       lastRep.sampleIndices,
       populationCategory,
@@ -539,7 +567,17 @@ export async function animateProportionSampleBatch(
       categoryLabels,
       lastRep.replicateIndex,
       true,
+      twoCatK2,
     )
+    if (twoCatK3) {
+      appendMultiGroupSampleStatMarkers(
+        sampleGroup,
+        sampleX,
+        lastProps,
+        groupBands,
+        lastRep.replicateIndex,
+      )
+    }
   } else {
     for (const rep of priorReps) {
       appendProportionBarcode(
@@ -806,8 +844,8 @@ export async function animateOneProportionSample(
 }
 
 /**
- * two_cat (k=2) sampling animation:
- * fill P1 → fly → restack per group → hybrid charts + diff summary → P3 arrow drop.
+ * two_cat sampling animation (k=2 difference, or k≥3 average deviation):
+ * fill P1 → fly → restack per group → hybrid charts + summary → P3 drop.
  */
 export async function animateTwoCatProportionSample(
   ctx: TwoCatProportionSampleAnimContext,
@@ -824,6 +862,7 @@ export async function animateTwoCatProportionSample(
     groupBands,
     nGroups,
     statKind,
+    populationGrandProp,
     sampleIndices,
     sampleStat,
     sampleX,
@@ -846,24 +885,37 @@ export async function animateTwoCatProportionSample(
     m,
   } = ctx
 
-  if (signal.aborted || nGroups !== 2 || groupBands.length < 2) return
+  if (signal.aborted || nGroups < 2 || groupBands.length < 2) return
 
+  const isAvgDev = nGroups >= 3
   archiveCurrentSampleStats(sampleGroup)
   clearSampleProportionDisplay(sampleGroup)
   clearFlyLayer(flyGroup)
   resetProportionDotsOutline(popGroup)
 
-  const kind: 'difference' | 'ratio' =
-    statKind === 'ratio' ? 'ratio' : 'difference'
+  const kind: StatKind = isAvgDev
+    ? 'average_deviation'
+    : statKind === 'ratio'
+      ? 'ratio'
+      : 'difference'
   const groupProps = sampleGroupProportions(
     sampleIndices,
     populationCategory,
     populationGroup,
     nGroups,
   )
+  const grandCentre = Number.isFinite(populationGrandProp)
+    ? populationGrandProp
+    : proportionFromEncoded(
+        sampleIndices.map((i) => populationCategory[i] ?? 1),
+        0,
+      )
   const summaryStat = Number.isFinite(sampleStat)
     ? sampleStat
-    : combineGroupProps(groupProps[0]!, groupProps[1]!, kind)
+    : isAvgDev
+      ? groupProps.reduce((s, p) => s + Math.abs(p - grandCentre), 0) /
+        Math.max(1, groupProps.length)
+      : combineGroupProps(groupProps[0]!, groupProps[1]!, kind === 'ratio' ? 'ratio' : 'difference')
 
   const showSamplingAnimation = m < 20 && !includeDist
   const fullDistAnimation = includeDist && m < 20
@@ -904,12 +956,12 @@ export async function animateTwoCatProportionSample(
       sampleTiming,
       numCatMode: true,
       statKind: kind,
-      nGroups: 2,
+      nGroups,
       groupStats: groupProps,
       paneInnerHeight: innerHeight,
       groupBands,
       statistic: 'mean',
-      populationGrandStat: 0,
+      populationGrandStat: isAvgDev ? grandCentre : 0,
       populationStat,
       statZoneTop,
       m,
@@ -920,7 +972,7 @@ export async function animateTwoCatProportionSample(
   }
 
   const showSummary = async (animate: boolean) => {
-    drawTwoCatSampleProportionCharts(
+    drawMultiGroupSampleProportionCharts(
       sampleGroup,
       sampleIndices,
       populationCategory,
@@ -933,22 +985,62 @@ export async function animateTwoCatProportionSample(
       categoryLabels,
       replicateIndex,
       true,
+      !isAvgDev,
     )
     const wait = (ms: number) => delay(ms, signal)
-    await animateTwoGroupSampleDiffSummary(
-      sampleGroup,
-      sampleX,
-      groupProps,
-      groupBands,
-      diffZone,
-      'mean',
-      kind,
-      replicateIndex,
-      animate ? sampleTiming : INSTANT_TWO_GROUP_SUMMARY_TIMING,
-      wait,
-      () => signal.aborted,
-      PROP_DIFF_SYMBOL,
-    )
+    if (isAvgDev) {
+      appendMultiGroupSampleStatMarkers(
+        sampleGroup,
+        sampleX,
+        groupProps,
+        groupBands,
+        replicateIndex,
+      )
+      if (animate) {
+        await animateSampleDeviationSummary(
+          sampleGroup,
+          sampleX,
+          groupProps,
+          grandCentre,
+          groupBands,
+          replicateIndex,
+          innerWidth,
+          innerHeight,
+          sampleTiming,
+          wait,
+          () => signal.aborted,
+        )
+      } else {
+        await animateSampleDeviationSummary(
+          sampleGroup,
+          sampleX,
+          groupProps,
+          grandCentre,
+          groupBands,
+          replicateIndex,
+          innerWidth,
+          innerHeight,
+          { multiGroupArrowsMs: 0 },
+          wait,
+          () => signal.aborted,
+        )
+      }
+    } else {
+      await animateTwoGroupSampleDiffSummary(
+        sampleGroup,
+        sampleX,
+        groupProps,
+        groupBands,
+        diffZone,
+        'mean',
+        kind,
+        replicateIndex,
+        animate ? sampleTiming : INSTANT_TWO_GROUP_SUMMARY_TIMING,
+        wait,
+        () => signal.aborted,
+        PROP_DIFF_SYMBOL,
+      )
+    }
   }
 
   if (!showSamplingAnimation) {

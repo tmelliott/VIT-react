@@ -283,8 +283,8 @@ function buildTwoCat(): P1GalleryFixture {
   const populationStat = combineGroupProps(groupStats[0]!, groupStats[1]!, 'difference')
   return {
     id: 'two_cat',
-    title: 'Two categorical — group proportions',
-    description: 'Multi-group proportion bars with a difference summary.',
+    title: 'Two categorical (k=2) — difference of proportions',
+    description: 'Per-group proportion charts with a p̂₂ − p̂₁ summary.',
     kind: 'proportion',
     props: proportionBase({
       populationCategory,
@@ -300,6 +300,46 @@ function buildTwoCat(): P1GalleryFixture {
   }
 }
 
+function buildTwoCatThreeGroups(): P1GalleryFixture {
+  const rand = mulberry32(101)
+  const nPer = 30
+  // Distinct focus rates so average deviation is visible (parallel to A/B/C means).
+  const rates = [0.25, 0.45, 0.7]
+  const groupLevels = ['A', 'B', 'C']
+  const populationCategory: number[] = []
+  const populationGroup: number[] = []
+  for (let g = 0; g < rates.length; g++) {
+    for (let i = 0; i < nPer; i++) {
+      populationCategory.push(rand() < rates[g]! ? 0 : 1)
+      populationGroup.push(g)
+    }
+  }
+  const nGroups = groupLevels.length
+  const groupStats = groupLevels.map((_, g) => {
+    const encoded = populationCategory.filter((_, i) => populationGroup[i] === g)
+    return proportionFromEncoded(encoded, 0)
+  })
+  const grand = proportionFromEncoded(populationCategory, 0)
+  const populationStat = averageDeviationFromGroups(groupStats, grand)
+  return {
+    id: 'two_cat_k3',
+    title: 'Two categorical (k≥3) — average deviation',
+    description: 'Three group proportion charts with average-deviation markers.',
+    kind: 'proportion',
+    props: proportionBase({
+      populationCategory,
+      populationGroup,
+      groupLevels,
+      groupStats,
+      categoryLabels: ['Yes', 'No'],
+      nGroups,
+      statKind: 'average_deviation',
+      populationStat,
+      variableSupport: 'two_cat',
+    }),
+  }
+}
+
 /** Static P1 scenarios for design review without R. */
 export const p1GalleryFixtures: P1GalleryFixture[] = [
   buildOneNum('mean'),
@@ -308,4 +348,5 @@ export const p1GalleryFixtures: P1GalleryFixture[] = [
   buildNumCatThreeGroups(),
   buildOneCat(),
   buildTwoCat(),
+  buildTwoCatThreeGroups(),
 ]

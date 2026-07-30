@@ -3,6 +3,7 @@ import {
   formatProportion,
   multiUnitGroupRows,
   proportionChartDescription,
+  proportionFromEncoded,
   PROP_ALT_BG,
   PROP_ALT_STROKE,
   PROP_FOCUS_BG,
@@ -16,10 +17,16 @@ import {
 } from './proportionLayout'
 import {
   groupColor,
+  sampleAvgDevLabelZone,
+  SAMPLE_BAND_ARROW_HEIGHT,
   twoGroupDiffZone,
   type GroupBand,
 } from './groupLayout'
-import { appendTwoGroupPopulationDiffDisplay } from './sampleStatSummary'
+import {
+  appendAverageDeviationLabel,
+  appendPopulationDeviationMarkers,
+  appendTwoGroupPopulationDiffDisplay,
+} from './sampleStatSummary'
 import { STAT_GAP, TRIANGLE_SIZE, TWO_GROUP_DIFF_ZONE_HEIGHT } from './statMarker'
 import type { StatKind } from '../types'
 
@@ -853,6 +860,39 @@ export function proportionGroupBands(
   })
 }
 
+/**
+ * K≥3 population / shared layout: unit chart per row + deviation-arrow strip,
+ * with average-deviation label zone at the bottom.
+ */
+export function proportionAvgDevBands(
+  innerHeight: number,
+  groupLevels: string[],
+): GroupBand[] {
+  const labelZone = sampleAvgDevLabelZone(innerHeight)
+  const rows = multiUnitGroupRows(labelZone.top, groupLevels.length, 0)
+  return groupLevels.map((label, index) => {
+    const row = rows[index]!
+    const arrowH = Math.min(
+      SAMPLE_BAND_ARROW_HEIGHT,
+      Math.max(14, Math.floor(row.height * 0.28)),
+    )
+    const dotAreaHeight = Math.max(28, row.height - arrowH)
+    return {
+      index,
+      label,
+      top: row.top,
+      height: row.height,
+      dotAreaHeight,
+      baselineY: row.top + dotAreaHeight,
+      statZoneTop: row.top + dotAreaHeight,
+      statZoneHeight: row.height - dotAreaHeight,
+      boxTop: row.top + row.height,
+      boxAreaHeight: 0,
+      color: groupColor(index),
+    }
+  })
+}
+
 export function drawMultiGroupProportionBars(
   parent: SVGGElement,
   encoded: number[],
@@ -866,8 +906,12 @@ export function drawMultiGroupProportionBars(
   showStat = true,
   innerHeight?: number,
   options: {
-    /** Population difference / ratio arrow under the group rows. */
+    /** Population difference / ratio arrow under the group rows (k=2). */
     showDiffSummary?: boolean
+    /** Average-deviation arrows + label (k≥3). */
+    showAvgDevSummary?: boolean
+    /** Overall focus proportion (defaults to pool proportion of `encoded`). */
+    grandProp?: number
     statKind?: StatKind
     dotStyle?: 'outline' | 'filled'
   } = {},
@@ -882,9 +926,19 @@ export function drawMultiGroupProportionBars(
     showStat &&
     nGroups === 2 &&
     groupStats.length >= 2
-  const bottomReserve = showDiff ? TWO_GROUP_DIFF_ZONE_HEIGHT : 0
-  const rows = multiUnitGroupRows(height, nGroups, bottomReserve)
-  const bands = proportionGroupBands(height, groupLevels, bottomReserve)
+  const showAvgDev =
+    options.showAvgDevSummary === true &&
+    showStat &&
+    nGroups >= 3 &&
+    groupStats.length >= 3
+
+  const bands = showAvgDev
+    ? proportionAvgDevBands(height, groupLevels)
+    : proportionGroupBands(
+        height,
+        groupLevels,
+        showDiff ? TWO_GROUP_DIFF_ZONE_HEIGHT : 0,
+      )
 
   for (let gi = 0; gi < nGroups; gi++) {
     const groupEncoded: number[] = []
@@ -895,14 +949,16 @@ export function drawMultiGroupProportionBars(
         indexMap.push(i)
       }
     }
-    const row = rows[gi]!
-    const layout = unitGroupRowLayout(row.top, row.height, gi === 0)
+    const band = bands[gi]
+    if (!band) continue
+    const chartH = showAvgDev ? band.dotAreaHeight : band.height
+    const layout = unitGroupRowLayout(band.top, chartH, gi === 0)
     const subG = g.append('g').attr('class', 'prop-group')
     drawHybridProportionChart(
       subG.node()!,
       groupEncoded,
       innerWidth,
-      row.height,
+      chartH,
       xScale,
       {
         classPrefix: `prop-g${gi}`,
@@ -929,6 +985,38 @@ export function drawMultiGroupProportionBars(
       (options.statKind === 'ratio' ? 'ratio' : 'difference') as StatKind,
       'p̂',
     )
+  } else if (showAvgDev) {
+    const grand =
+      options.grandProp != null && Number.isFinite(options.grandProp)
+        ? options.grandProp
+        : proportionFromEncoded(encoded, 0)
+    if (Number.isFinite(grand)) {
+      const labelZone = sampleAvgDevLabelZone(height)
+      g.append('line')
+        .attr('class', 'pop-grand-mean')
+        .attr('x1', xScale(grand)!)
+        .attr('x2', xScale(grand)!)
+        .attr('y1', 0)
+        .attr('y2', labelZone.top)
+        .attr('stroke', '#111827')
+        .attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '5,3')
+
+      appendPopulationDeviationMarkers(
+        parent,
+        xScale,
+        groupStats,
+        grand,
+        bands,
+      )
+      appendAverageDeviationLabel(
+        parent,
+        innerWidth,
+        labelZone,
+        groupStats,
+        grand,
+      )
+    }
   }
 }
 

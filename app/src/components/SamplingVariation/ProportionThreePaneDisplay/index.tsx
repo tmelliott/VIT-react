@@ -22,7 +22,7 @@ import {
 import type { PaneLayout } from '../d3/paneCoords'
 import { domainsFromState, paneRegions, usePaneLayout, useSamplingScales } from '../hooks/useSamplingScales'
 import { DOT_RADIUS } from '../d3/heapLayout'
-import { computeSampleTwoGroupBands, type GroupBand } from '../d3/groupLayout'
+import { computeSampleMultiGroupBands, computeSampleTwoGroupBands, type GroupBand } from '../d3/groupLayout'
 import {
   effectiveDistDomain,
   effectivePopDomain,
@@ -35,6 +35,7 @@ import { PaneHelpModal } from '../PaneHelpModal'
 import { paneHelpContent } from '../paneHelpContent'
 import type { StatKind } from '../types'
 import { distBaselineValue } from '../statistics'
+import { proportionFromEncoded } from '../d3/proportionLayout'
 
 export type ProportionThreePaneHandle = {
   popGroup: SVGGElement
@@ -54,7 +55,9 @@ export type ProportionThreePaneHandle = {
   groupLevels: string[]
   groupStats: number[]
   categoryLabels: [string, string]
-  /** P2 band geometry for two_cat k=2 (empty otherwise). */
+  /** Overall focus proportion (centre for k≥3 average deviation). */
+  populationGrandProp: number
+  /** P2 band geometry for two_cat (empty for one_cat). */
   sampleGroupBands: GroupBand[]
   innerWidth: number
   innerHeight: number
@@ -201,12 +204,17 @@ export const ProportionThreePaneDisplay = forwardRef<
     [margin.left, plotTop, paneHeight, innerWidth],
   )
 
-  const sampleGroupBands = useMemo(
-    () =>
-      twoCat && nGroups === 2
-        ? computeSampleTwoGroupBands(innerHeight, groupLevels)
-        : [],
-    [twoCat, nGroups, innerHeight, groupLevels],
+  const sampleGroupBands = useMemo(() => {
+    if (!twoCat || nGroups < 2 || groupLevels.length < 2) return []
+    if (nGroups >= 3) {
+      return computeSampleMultiGroupBands(innerHeight, groupLevels)
+    }
+    return computeSampleTwoGroupBands(innerHeight, groupLevels)
+  }, [twoCat, nGroups, innerHeight, groupLevels])
+
+  const populationGrandProp = useMemo(
+    () => proportionFromEncoded(populationCategory, 0),
+    [populationCategory],
   )
 
   useImperativeHandle(
@@ -229,6 +237,7 @@ export const ProportionThreePaneDisplay = forwardRef<
       groupLevels,
       groupStats,
       categoryLabels: catLabels,
+      populationGrandProp,
       sampleGroupBands,
       innerWidth,
       innerHeight,
@@ -251,6 +260,7 @@ export const ProportionThreePaneDisplay = forwardRef<
       groupLevels,
       groupStats,
       catLabels,
+      populationGrandProp,
       sampleGroupBands,
       innerWidth,
       innerHeight,
@@ -297,6 +307,8 @@ export const ProportionThreePaneDisplay = forwardRef<
         innerHeight,
         {
           showDiffSummary: nGroups === 2,
+          showAvgDevSummary: nGroups >= 3,
+          grandProp: populationGrandProp,
           statKind: (statKind || 'difference') as StatKind,
           dotStyle: 'outline',
         },
@@ -314,6 +326,7 @@ export const ProportionThreePaneDisplay = forwardRef<
     innerHeight,
     showPopulationStat,
     populationStat,
+    populationGrandProp,
     catLabels,
     nGroups,
     statKind,

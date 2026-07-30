@@ -113,10 +113,8 @@ export function useAnimationController(
 
       if (isProportionHandle(handle)) {
         const oneCat = handle.variableSupport === 'one_cat'
-        const twoCatK2 =
-          handle.variableSupport === 'two_cat' && handle.nGroups === 2
-        // cat×cat with k≥3 still deferred.
-        if (!oneCat && !twoCatK2) {
+        const twoCat = handle.variableSupport === 'two_cat' && handle.nGroups >= 2
+        if (!oneCat && !twoCat) {
           if (!signal.aborted) setCursor(end)
           setPhase('idle')
           signalRef.current = null
@@ -181,7 +179,7 @@ export function useAnimationController(
             })
             r = batchEnd
           }
-        } else if (twoCatK2) {
+        } else if (twoCat) {
           for (let r = start; r < end; r++) {
             if (signal.aborted) break
             const sampleIndices = getSampleIndices(indices, sampleSize, r)
@@ -201,6 +199,7 @@ export function useAnimationController(
                 | 'ratio'
                 | 'average_deviation'
                 | '',
+              populationGrandProp: handle.populationGrandProp,
               sampleIndices,
               sampleStat: sampleStats[r]!,
               sampleX: handle.sampleX,
