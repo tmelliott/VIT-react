@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -345,6 +346,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
     const flyGroupRef = useRef<SVGGElement>(null)
     const axisRefs = useRef<(SVGGElement | null)[]>([null, null, null])
     const [size, setSize] = useState({ width: 720, height: 540 })
+    const clipIdPrefix = useId().replace(/:/g, '')
 
     const stat = parseSamplingStatistic(statistic)
     const numCatMode =
@@ -684,7 +686,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
         <svg width={size.width} height={size.height} className="block overflow-hidden">
           {PANE_LABELS.map((label, paneIndex) => {
             const yOffset = paneIndex * paneHeight
-            const clipId = `pane-clip-${paneIndex}`
+            const clipId = `${clipIdPrefix}-pane-clip-${paneIndex}`
             const message = paneMessage(paneIndex, variableSupport, moduleReady)
             return (
               <g key={label} transform={`translate(0, ${yOffset})`}>

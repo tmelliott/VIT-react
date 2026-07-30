@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from '@tanstack/react-router'
 import { LandingPage } from './components/LandingPage'
 import { RootLayout } from './routes/RootLayout'
+import { PlotsGalleryRoute } from './routes/PlotsGalleryRoute'
 import { SamplingVariationDocsRoute } from './routes/SamplingVariationDocsRoute'
 import { SamplingVariationRoute } from './routes/SamplingVariationRoute'
 import { parseAppSearch } from './searchParams'
@@ -28,7 +29,19 @@ export const sampvarDocsRoute = createRoute({
   component: SamplingVariationDocsRoute,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, sampvarRoute, sampvarDocsRoute])
+/** Design gallery — mock data only, no R gate. */
+export const plotsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/plots',
+  component: PlotsGalleryRoute,
+})
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  sampvarRoute,
+  sampvarDocsRoute,
+  plotsRoute,
+])
 
 export const router = createRouter({
   routeTree,

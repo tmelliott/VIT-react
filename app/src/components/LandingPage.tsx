@@ -82,6 +82,18 @@ export function LandingPage() {
             )
           })}
         </div>
+
+        <p className="mt-8 text-center text-xs text-gray-400">
+          <Link
+            to="/plots"
+            search={(prev) => prev}
+            className="hover:text-gray-600 hover:underline"
+          >
+            P1 plot gallery
+          </Link>
+          {' · '}
+          mock data, no R required
+        </p>
       </div>
     </div>
   )

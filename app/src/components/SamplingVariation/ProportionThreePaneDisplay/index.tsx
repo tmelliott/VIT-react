@@ -1,6 +1,7 @@
 import {
   forwardRef,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -132,6 +133,7 @@ export const ProportionThreePaneDisplay = forwardRef<
   const flyGroupRef = useRef<SVGGElement>(null)
   const axisRefs = useRef<(SVGGElement | null)[]>([null, null, null])
   const [size, setSize] = useState({ width: 720, height: 540 })
+  const clipIdPrefix = useId().replace(/:/g, '')
 
   const oneCat = variableSupport === 'one_cat'
   const twoCat = variableSupport === 'two_cat'
@@ -413,7 +415,7 @@ export const ProportionThreePaneDisplay = forwardRef<
       <svg width={size.width} height={size.height} className="block overflow-hidden">
         {PANE_LABELS.map((label, paneIndex) => {
           const yOffset = paneIndex * paneHeight
-          const clipId = `prop-pane-clip-${paneIndex}`
+          const clipId = `${clipIdPrefix}-prop-pane-clip-${paneIndex}`
           const message = paneMessage(paneIndex, variableSupport, moduleReady)
           return (
             <g key={label} transform={`translate(0, ${yOffset})`}>
