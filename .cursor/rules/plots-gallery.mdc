@@ -1,0 +1,38 @@
+---
+description: New or changed charts must appear on the /plots mock gallery
+globs: app/src/components/SamplingVariation/**/*.{ts,tsx},app/src/fixtures/**/*.ts,app/src/routes/PlotsGalleryRoute.tsx
+alwaysApply: false
+---
+
+# Plots gallery checklist
+
+`/plots` is the mock-data gallery for visual design (no R). When you add or materially change a chart, update the gallery in the same change.
+
+## Required
+
+1. Add or update a fixture in `app/src/fixtures/p1Gallery.ts` (or a sibling fixture module if the gallery grows).
+2. Ensure `PlotsGalleryRoute` renders it (fixtures are mapped from `p1GalleryFixtures` today).
+3. Use plain props + `moduleReady={false}` — never wire the gallery to Rserve/widget hooks.
+4. Prefer cropping to the relevant pane (`P1Crop` pattern) over adding `show`/`paneCount` props to the display shells unless product UI needs that.
+
+## What counts as a “new chart”
+
+- A new population / sample / distribution visual variant (e.g. new `variableSupport`, statistic, or group layout).
+- A new drawing path in `ThreePaneDisplay`, `ProportionThreePaneDisplay`, or `d3/*` that produces a distinct P1 (or later P2/P3) look.
+
+## Out of scope
+
+- Pure animation timing tweaks with no visual structure change.
+- Control-panel / routing / R plumbing only.
+
+## Example
+
+```ts
+// app/src/fixtures/p1Gallery.ts
+export const p1GalleryFixtures = [
+  // …existing
+  buildOneNum('iqr'), // ← new visual variant gets a fixture
+]
+```
+
+Verify at `/plots` without starting R.
