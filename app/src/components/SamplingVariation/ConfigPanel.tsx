@@ -14,6 +14,7 @@ type ConfigPanelProps = {
   statistic: string
   statKindLabel: string
   proportionMode: boolean
+  slopeMode?: boolean
   numCatMode: boolean
   nGroups: number
   minSampleSize: number
@@ -40,6 +41,7 @@ export function ConfigPanel({
   statistic,
   statKindLabel,
   proportionMode,
+  slopeMode = false,
   numCatMode,
   nGroups,
   minSampleSize,
@@ -141,7 +143,7 @@ export function ConfigPanel({
           />
         </label>
 
-        {!proportionMode && (
+        {!proportionMode && !slopeMode && (
           <StatisticSelect
             statistic={statistic}
             numCatMode={numCatMode}
@@ -154,6 +156,12 @@ export function ConfigPanel({
         {proportionMode && (
           <p className="text-sm text-gray-700">
             Statistic: <span className="font-medium">Proportion</span>
+          </p>
+        )}
+
+        {slopeMode && (
+          <p className="text-sm text-gray-700">
+            Statistic: <span className="font-medium">Slope</span>
           </p>
         )}
 

@@ -4,6 +4,7 @@ import {
   populationGrandStat,
 } from '../components/SamplingVariation/d3/groupLayout'
 import { proportionFromEncoded } from '../components/SamplingVariation/d3/proportionLayout'
+import { leastSquares } from '../components/SamplingVariation/d3/slopeMath'
 import { combineGroupProps } from '../components/SamplingVariation/statistics'
 import type { VariableSupport } from '../components/SamplingVariation/variableSupport'
 
@@ -71,6 +72,20 @@ type ProportionFixtureProps = {
   scales: undefined
 }
 
+type SlopeFixtureProps = {
+  populationX: number[]
+  populationY: number[]
+  slope: number
+  intercept: number
+  showPopulationStat: boolean
+  moduleReady: boolean
+  variableSupport: VariableSupport
+  sampleSize: number
+  /** Synthetic sample slopes so P1B can use the post-Confirm y-scale. */
+  sampleStats?: number[]
+  scales: undefined
+}
+
 export type P1GalleryFixture =
   | {
       id: string
@@ -85,6 +100,13 @@ export type P1GalleryFixture =
       description: string
       kind: 'proportion'
       props: ProportionFixtureProps
+    }
+  | {
+      id: string
+      title: string
+      description: string
+      kind: 'slope'
+      props: SlopeFixtureProps
     }
 
 function numericBase(
@@ -340,6 +362,45 @@ function buildTwoCatThreeGroups(): P1GalleryFixture {
   }
 }
 
+function buildNumNumSlope(): P1GalleryFixture {
+  const rand = mulberry32(17)
+  const n = 70
+  const populationX: number[] = []
+  const populationY: number[] = []
+  // True slope ≈ 0.4, intercept ≈ 20, with moderate noise.
+  for (let i = 0; i < n; i++) {
+    const x = Math.round(normalish(rand, 50, 12) * 10) / 10
+    const y =
+      Math.round((20 + 0.4 * x + normalish(rand, 0, 6)) * 10) / 10
+    populationX.push(x)
+    populationY.push(y)
+  }
+  const { slope, intercept } = leastSquares(populationX, populationY)
+  // Stand-in sample slopes so the gallery P1B y-scale matches post-Confirm.
+  const sampleStats = Array.from({ length: 40 }, () => {
+    return slope + normalish(rand, 0, Math.max(0.05, Math.abs(slope) * 0.35))
+  })
+  return {
+    id: 'num_num_slope',
+    title: 'Numeric × numeric — regression slope',
+    description:
+      'Scatter with least-squares line, Δy/Δx rise-then-run arrows above the line, and slope formula panel.',
+    kind: 'slope',
+    props: {
+      populationX,
+      populationY,
+      slope,
+      intercept,
+      showPopulationStat: true,
+      moduleReady: false,
+      variableSupport: 'num_num',
+      sampleSize: 25,
+      sampleStats,
+      scales: undefined,
+    },
+  }
+}
+
 /** Static P1 scenarios for design review without R. */
 export const p1GalleryFixtures: P1GalleryFixture[] = [
   buildOneNum('mean'),
@@ -349,4 +410,5 @@ export const p1GalleryFixtures: P1GalleryFixture[] = [
   buildOneCat(),
   buildTwoCat(),
   buildTwoCatThreeGroups(),
+  buildNumNumSlope(),
 ]

@@ -22,6 +22,8 @@ export const samplingVariation = Robj.ocap(
             progress: z.union([z.number(), z.undefined()]),
             error_message: z.union([z.string(), z.undefined()]),
             population: z.union([z.instanceof(Float64Array), z.undefined()]),
+            population_y: z.union([z.instanceof(Float64Array), z.undefined()]),
+            population_intercept: z.union([z.number(), z.undefined()]),
             population_category: z.union([
               z.instanceof(Int32Array),
               z.undefined(),
@@ -156,6 +158,25 @@ export const samplingVariation = Robj.ocap(
         ),
         get: Robj.ocap([], Robj.numeric(0)),
         set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      population_y: Robj.list({
+        register: Robj.ocap(
+          [
+            Robj.js_function([z.instanceof(Float64Array)], z.null()),
+            z.string(),
+          ],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.numeric(0)),
+        set: Robj.ocap([z.instanceof(Float64Array)], Robj.null()),
+      }),
+      population_intercept: Robj.list({
+        register: Robj.ocap(
+          [Robj.js_function([z.number()], z.null()), z.string()],
+          Robj.character(1),
+        ),
+        get: Robj.ocap([], Robj.numeric(1)),
+        set: Robj.ocap([z.number()], Robj.null()),
       }),
       population_category: Robj.list({
         register: Robj.ocap(

@@ -103,6 +103,100 @@ export function drawDistPopulationReferenceLine(
   })
 }
 
+/** Horizontal population-slope reference across a left-growing P3B heap. */
+export function drawHorizontalDistPopulationReferenceLine(
+  parent: SVGGElement,
+  yScale: d3.ScaleLinear<number, number>,
+  stat: number,
+  x1: number,
+  x2: number,
+  className = 'dist-pop-stat-line',
+) {
+  drawHorizontalReferenceLine(parent, yScale, stat, x1, x2, {
+    className,
+    dashed: true,
+    halo: true,
+    color: DIST_POPULATION_REF_COLOR,
+    strokeWidth: DIST_POPULATION_REF_WIDTH,
+  })
+}
+
+/** P3B: solid y=0 baseline + dashed population-slope (truth) line. */
+export function drawHorizontalDistTwoGroupReferenceLines(
+  parent: SVGGElement,
+  yScale: d3.ScaleLinear<number, number>,
+  populationSlope: number,
+  x1: number,
+  x2: number,
+  baseline = 0,
+) {
+  drawHorizontalReferenceLine(parent, yScale, baseline, x1, x2, {
+    className: 'dist-zero-line',
+    dashed: false,
+    halo: true,
+  })
+  if (Number.isFinite(populationSlope)) {
+    drawHorizontalDistPopulationReferenceLine(
+      parent,
+      yScale,
+      populationSlope,
+      x1,
+      x2,
+    )
+  }
+}
+
+function drawHorizontalReferenceLine(
+  parent: SVGGElement,
+  yScale: d3.ScaleLinear<number, number>,
+  stat: number,
+  x1: number,
+  x2: number,
+  options: ReferenceLineOptions,
+) {
+  const y = yScale(stat)
+  if (y == null || !Number.isFinite(y) || !Number.isFinite(stat)) return
+
+  const className = options.className ?? 'ref-stat-line'
+  const dashed = options.dashed ?? true
+  const color = options.color ?? REFERENCE_STAT_COLOR
+  const strokeWidth = options.strokeWidth ?? 1.5
+  const halo = options.halo ?? false
+
+  const sel = d3.select(parent)
+  sel.selectAll(`.${className}, .${className}-halo`).remove()
+
+  if (halo) {
+    sel
+      .append('line')
+      .attr('class', `${className}-halo`)
+      .attr('x1', x1)
+      .attr('x2', x2)
+      .attr('y1', y)
+      .attr('y2', y)
+      .attr('stroke', DIST_REF_HALO_COLOR)
+      .attr('stroke-width', DIST_REF_HALO_WIDTH)
+      .attr('stroke-linecap', 'round')
+  }
+
+  const line = sel
+    .append('line')
+    .attr('class', className)
+    .attr('x1', x1)
+    .attr('x2', x2)
+    .attr('y1', y)
+    .attr('y2', y)
+    .attr('stroke', color)
+    .attr('stroke-width', strokeWidth)
+    .attr('stroke-linecap', 'round')
+
+  if (dashed) {
+    line.attr('stroke-dasharray', '5,4')
+  } else {
+    line.attr('stroke-dasharray', null)
+  }
+}
+
 /** P3 k=2: solid baseline line (0 for differences, 1 for ratios) and population summary. */
 export function drawDistTwoGroupReferenceLines(
   parent: SVGGElement,

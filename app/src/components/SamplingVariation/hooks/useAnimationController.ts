@@ -21,6 +21,11 @@ import {
   clearProportionAnimationLayers,
 } from '../d3/animateProportionSample'
 import {
+  animateOneSlopeSample,
+  animateSlopeSampleBatch,
+  clearSlopeAnimationLayers,
+} from '../d3/animateSlopeSample'
+import {
   getSampleIndices,
   DEFAULT_SAMPLE_ANIMATION_TIMING,
   M1000_BATCH,
@@ -35,8 +40,8 @@ import {
 } from '../types'
 import type { SamplingVariationState } from '../../rserve/vit.types'
 import { ensureDistLayout, useDistLayout } from './useDistLayout'
-import type { ThreePaneHandle } from '../ThreePaneDisplay'
-import { isProportionHandle, type PaneHandle } from '../paneHandle'
+import { isProportionHandle, isSlopeHandle, type PaneHandle } from '../paneHandle'
+import { precomputeHorizontalDistLayout } from '../d3/distPhysics'
 
 export type { PaneHandle } from '../paneHandle'
 
@@ -72,6 +77,16 @@ export function useAnimationController(
         handle.flyGroup,
         handle.distGroup,
         false,
+      )
+      return
+    }
+    if (isSlopeHandle(handle)) {
+      clearSlopeAnimationLayers(
+        handle.popGroup,
+        handle.sampleGroup,
+        handle.flyGroup,
+        true,
+        handle.distGroup,
       )
       return
     }
@@ -265,6 +280,105 @@ export function useAnimationController(
         return
       }
 
+      if (isSlopeHandle(handle)) {
+        const distLayout = precomputeHorizontalDistLayout(
+          sampleStats,
+          handle.distY,
+          handle.distBaselineX,
+          handle.dotRadius,
+          handle.distPlotBoundX,
+        )
+
+        if (m === 1000) {
+          let r = start
+          let firstBatch = true
+          while (r < end && !signal.aborted) {
+            const batchEnd = Math.min(r + M1000_BATCH, end)
+            const batchReps = []
+            for (let i = r; i < batchEnd; i++) {
+              batchReps.push({
+                replicateIndex: i,
+                sampleStat: sampleStats[i]!,
+                sampleIndices: getSampleIndices(indices, sampleSize, i),
+              })
+            }
+            await animateSlopeSampleBatch({
+              popGroup: handle.popGroup,
+              sampleGroup: handle.sampleGroup,
+              distGroup: handle.distGroup,
+              flyGroup: handle.flyGroup,
+              populationX: handle.populationX,
+              populationY: handle.populationY,
+              popX: handle.popX,
+              sampleX: handle.sampleX,
+              sampleYScale: handle.sampleYScale,
+              distY: handle.distY,
+              distLayout,
+              xDomain: handle.xDomain,
+              yDomain: handle.yDomain,
+              panelYDomain: handle.panelYDomain,
+              distPanelYDomain: handle.distPanelYDomain,
+              split: handle.split,
+              distSplit: handle.distSplit,
+              scatterPlotHeight: handle.scatterPlotHeight,
+              distBaselineX: handle.distBaselineX,
+              dotRadius: handle.dotRadius,
+              signal,
+              timingMs,
+              includeDist,
+              reps: batchReps,
+              resetSample: firstBatch && start === 0,
+            })
+            firstBatch = false
+            r = batchEnd
+            if (!signal.aborted) setCursor(r)
+          }
+        } else {
+          for (let r = start; r < end && !signal.aborted; r++) {
+            await animateOneSlopeSample({
+              popGroup: handle.popGroup,
+              sampleGroup: handle.sampleGroup,
+              distGroup: handle.distGroup,
+              flyGroup: handle.flyGroup,
+              paneLayout: handle.paneLayout,
+              populationX: handle.populationX,
+              populationY: handle.populationY,
+              sampleIndices: getSampleIndices(indices, sampleSize, r),
+              sampleStat: sampleStats[r]!,
+              popX: handle.popX,
+              popYScale: handle.popYScale,
+              sampleX: handle.sampleX,
+              sampleYScale: handle.sampleYScale,
+              distY: handle.distY,
+              distLayout,
+              xDomain: handle.xDomain,
+              yDomain: handle.yDomain,
+              panelYDomain: handle.panelYDomain,
+              distPanelYDomain: handle.distPanelYDomain,
+              split: handle.split,
+              distSplit: handle.distSplit,
+              scatterPlotHeight: handle.scatterPlotHeight,
+              scatterPlotLeft: handle.scatterPlotLeft,
+              distBaselineX: handle.distBaselineX,
+              dotRadius: handle.dotRadius,
+              signal,
+              timingMs,
+              sampleTiming,
+              m,
+              accumulateOnly,
+              includeDist,
+              replicateIndex: r,
+            })
+            if (!signal.aborted) setCursor(r + 1)
+          }
+        }
+
+        if (!signal.aborted) setCursor(end)
+        setPhase('idle')
+        signalRef.current = null
+        return
+      }
+
       const population = toNumberArray(state.population)
       const populationGroup = toIntArray(state.population_group)
 
@@ -424,6 +538,16 @@ export function useAnimationController(
         handle.flyGroup,
         handle.distGroup,
         true,
+      )
+      return
+    }
+    if (isSlopeHandle(handle)) {
+      clearSlopeAnimationLayers(
+        handle.popGroup,
+        handle.sampleGroup,
+        handle.flyGroup,
+        false,
+        handle.distGroup,
       )
       return
     }

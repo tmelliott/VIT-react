@@ -46,6 +46,8 @@ export type SamplingVariationProperties = {
   progress: PropertyGet<number>
   error_message: PropertyGet<string>
   population: PropertyGet<Float64Array>
+  population_y: PropertyGet<Float64Array>
+  population_intercept: PropertyGet<number>
   population_category: PropertyGet<Int32Array>
   population_group: PropertyGet<Int32Array>
   group_levels: PropertyGet<string[]>

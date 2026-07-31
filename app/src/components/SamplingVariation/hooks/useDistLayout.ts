@@ -25,12 +25,15 @@ function hasDistLayoutFields(handle: PaneHandle): handle is PaneHandle & DistLay
 
 function layoutCacheKey(statsLen: number, handle: DistLayoutHandle): string {
   const [d0, d1] = handle.distX.domain()
+  const [r0, r1] = handle.distX.range()
   return [
     statsLen,
     handle.paneLayout.innerWidth,
     handle.distBaselineY,
     d0,
     d1,
+    r0,
+    r1,
   ].join(':')
 }
 

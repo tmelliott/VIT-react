@@ -1,6 +1,7 @@
 export type VariableSupport =
   | 'empty'
   | 'one_num'
+  | 'num_num'
   | 'num_cat'
   | 'one_cat'
   | 'two_cat'
@@ -28,8 +29,11 @@ export function getVariableSupport(
   const xIsCat = isCategoricalVariable(xvar, groupVariables)
   const yIsCat = yvar !== '' && isCategoricalVariable(yvar, groupVariables)
 
+  const yIsNum = yvar !== '' && isNumericVariable(yvar, variables)
+
   if (xIsNum && !yIsCat) {
     if (!yvar) return 'one_num'
+    if (yIsNum && yvar !== xvar) return 'num_num'
     return 'unsupported'
   }
   if (xIsNum && yIsCat) return 'num_cat'

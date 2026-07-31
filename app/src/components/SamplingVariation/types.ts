@@ -6,7 +6,13 @@ export type AnimationPhase = 'idle' | 'playing' | 'paused'
 
 export type MValue = 1 | 5 | 20 | 1000
 
-export type StatKind = 'difference' | 'ratio' | 'average_deviation' | 'proportion' | ''
+export type StatKind =
+  | 'difference'
+  | 'ratio'
+  | 'average_deviation'
+  | 'proportion'
+  | 'slope'
+  | ''
 
 export function toNumberArray(
   data: Float64Array | number[] | undefined | null,
@@ -53,6 +59,7 @@ export function statKindLabel(
     return 'IQR ratio'
   }
   if (kind === 'proportion') return 'Proportion'
+  if (kind === 'slope') return 'Slope'
   if (kind === 'difference' || nGroups === 2) return 'Difference'
   if (kind === 'average_deviation' || nGroups > 2) return 'Average deviation'
   return ''

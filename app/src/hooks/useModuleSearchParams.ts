@@ -58,8 +58,9 @@ export function useModuleSearchParams({
       void set('xvar', search.xvar)
     }
     if (search.yvar !== undefined && search.yvar !== prev.yvar) {
+      // Secondary can be numeric (num×num) or categorical (num×cat / cat×cat).
       const nextYvar =
-        search.yvar === '' || groupVariables.includes(search.yvar)
+        search.yvar === '' || allVariables.includes(search.yvar)
           ? search.yvar
           : ''
       void set('yvar', nextYvar)

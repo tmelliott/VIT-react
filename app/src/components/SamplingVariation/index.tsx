@@ -13,6 +13,7 @@ import type { PaneHandle } from './paneHandle'
 import { ProgressBar } from './ProgressBar'
 import { ThreePaneDisplay } from './ThreePaneDisplay'
 import { ProportionThreePaneDisplay } from './ProportionThreePaneDisplay'
+import { SlopeThreePaneDisplay } from './SlopeThreePaneDisplay'
 import {
   isNumCatMode,
   statKindLabel,
@@ -84,12 +85,39 @@ function SamplingVariationView({
   const anim = useAnimationController(state, paneRef, inferenceActive)
   const progress = state.progress ?? 0
   const errorMessage = state.error_message ?? ''
-  const population = toNumberArray(state.population)
-  const populationGroup = toIntArray(state.population_group)
-  const groupLevels = toStringArray(state.group_levels)
-  const groupStats = toNumberArray(state.group_stats)
+  const population = useMemo(
+    () => toNumberArray(state.population),
+    [state.population],
+  )
+  const populationY = useMemo(
+    () => toNumberArray(state.population_y),
+    [state.population_y],
+  )
+  const sampleStats = useMemo(
+    () => toNumberArray(state.sample_stats),
+    [state.sample_stats],
+  )
+  const populationIntercept = state.population_intercept
+  const populationGroup = useMemo(
+    () => toIntArray(state.population_group),
+    [state.population_group],
+  )
+  const groupLevels = useMemo(
+    () => toStringArray(state.group_levels),
+    [state.group_levels],
+  )
+  const groupStats = useMemo(
+    () => toNumberArray(state.group_stats),
+    [state.group_stats],
+  )
   const nGroups = state.n_groups ?? 0
-  const statKind = (state.stat_kind ?? '') as '' | 'difference' | 'ratio' | 'average_deviation' | 'proportion'
+  const statKind = (state.stat_kind ?? '') as
+    | ''
+    | 'difference'
+    | 'ratio'
+    | 'average_deviation'
+    | 'proportion'
+    | 'slope'
   const variableSupport = getVariableSupport(
     xvar,
     yvar,
@@ -97,18 +125,23 @@ function SamplingVariationView({
     groupVariables,
   )
   const proportionMode = isProportionMode(variableSupport)
+  const slopeMode = variableSupport === 'num_num'
   const numCatMode = variableSupport === 'num_cat' && isNumCatMode(nGroups, yvar)
   const stat = parseSamplingStatistic(statistic)
   const allowedStatistics = availableStatistics(numCatMode, nGroups)
   useEffect(() => {
+    if (slopeMode || proportionMode) return
     if (allowedStatistics.includes(stat)) return
     void set?.('statistic', 'mean')
-  }, [allowedStatistics, stat, set])
+  }, [allowedStatistics, stat, set, slopeMode, proportionMode])
   const showPopulationPreview =
     (variableSupport === 'one_num' ||
       variableSupport === 'num_cat' ||
+      variableSupport === 'num_num' ||
       proportionMode) &&
-    (population.length > 0 || populationCategory.length > 0)
+    (population.length > 0 ||
+      populationCategory.length > 0 ||
+      (slopeMode && populationY.length > 0))
   const displayPopulationStat = useMemo(() => {
     if (variableSupport === 'one_num' && population.length > 0) {
       return populationGrandStat(population, stat)
@@ -140,15 +173,21 @@ function SamplingVariationView({
       ? dataset.dsInfo.nrows
       : Math.max(population.length, populationCategory.length, 1)
   const minSampleSize =
-    variableSupport === 'one_cat' ? 1 : numCatMode || variableSupport === 'two_cat' ? 2 : 1
+    variableSupport === 'one_cat'
+      ? 1
+      : numCatMode || variableSupport === 'two_cat' || slopeMode
+        ? 2
+        : 1
   const canConfirm =
     (variableSupport === 'one_num' ||
       variableSupport === 'num_cat' ||
+      variableSupport === 'num_num' ||
       proportionMode) &&
     xvar !== '' &&
+    (!slopeMode || yvar !== '') &&
     sampleSize >= minSampleSize &&
     sampleSize <= maxSampleSize &&
-    (proportionMode || allowedStatistics.includes(stat)) &&
+    (proportionMode || slopeMode || allowedStatistics.includes(stat)) &&
     moduleStatus !== 'computing'
 
   const handleXvarChange = (value: string) => {
@@ -189,6 +228,20 @@ function SamplingVariationView({
             moduleReady={inferenceActive}
             variableSupport={variableSupport}
             sampleSize={sampleSize}
+            scales={state.scales}
+          />
+        ) : slopeMode ? (
+          <SlopeThreePaneDisplay
+            ref={paneRef}
+            populationX={population}
+            populationY={populationY}
+            slope={state.population_stat}
+            intercept={populationIntercept}
+            showPopulationStat={showPopulationPreview}
+            moduleReady={inferenceActive}
+            variableSupport={variableSupport}
+            sampleSize={sampleSize}
+            sampleStats={sampleStats}
             scales={state.scales}
           />
         ) : (
@@ -245,6 +298,7 @@ function SamplingVariationView({
             statistic={statistic}
             statKindLabel={statKindLabel(statKind, nGroups, statistic)}
             proportionMode={proportionMode}
+            slopeMode={slopeMode}
             numCatMode={numCatMode}
             nGroups={nGroups}
             minSampleSize={minSampleSize}

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from '@tanstack/react-router'
 import { ThreePaneDisplay } from '../components/SamplingVariation/ThreePaneDisplay'
 import { ProportionThreePaneDisplay } from '../components/SamplingVariation/ProportionThreePaneDisplay'
+import { SlopeThreePaneDisplay } from '../components/SamplingVariation/SlopeThreePaneDisplay'
 import {
   p1GalleryFixtures,
   type P1GalleryFixture,
@@ -34,8 +35,10 @@ function FixtureCard({ fixture }: { fixture: P1GalleryFixture }) {
       <P1Crop>
         {fixture.kind === 'numeric' ? (
           <ThreePaneDisplay {...fixture.props} />
-        ) : (
+        ) : fixture.kind === 'proportion' ? (
           <ProportionThreePaneDisplay {...fixture.props} />
+        ) : (
+          <SlopeThreePaneDisplay {...fixture.props} />
         )}
       </P1Crop>
     </section>

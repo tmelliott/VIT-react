@@ -56,6 +56,71 @@ function applyArrowStroke(
     .attr(LINE_ATTRS)
 }
 
+/** Vertical arrow from `fromY` to `toY` at fixed `x`. */
+export function drawVerticalArrow(
+  parent: d3.Selection<SVGGElement, unknown, null, undefined>,
+  x: number,
+  fromY: number,
+  toY: number,
+  color: string,
+  opacity = 1,
+  headSize = MAX_HEAD_PX,
+  options?: { minSpan?: number },
+): d3.Selection<SVGGElement, unknown, null, undefined> {
+  const minSpan = options?.minSpan ?? MIN_ARROW_SPAN_PX
+  const squeeze = minSpan === 0
+  const g = parent.append('g').attr('class', 'vertical-arrow')
+  const expanded = expandArrowEndpoints(fromY, toY, minSpan)
+  const diff = expanded.toX - expanded.fromX
+  if (!Number.isFinite(expanded.fromX) || !Number.isFinite(expanded.toX) || Math.abs(diff) < 0.5) {
+    return g
+  }
+
+  const size = headSizeForSpan(diff, headSize, squeeze)
+  const dir = diff > 0 ? 1 : -1
+  // SVG y increases downward; expandArrowEndpoints treats "to" as the tip.
+  const y0 = expanded.fromX
+  const y1 = expanded.toX
+
+  applyArrowStroke(
+    g
+      .append('line')
+      .attr('class', 'arrow-shaft')
+      .attr('x1', x)
+      .attr('x2', x)
+      .attr('y1', y0)
+      .attr('y2', y1),
+    color,
+    opacity,
+  )
+
+  applyArrowStroke(
+    g
+      .append('line')
+      .attr('class', 'arrow-head arrow-head-a')
+      .attr('x1', x)
+      .attr('x2', x + size / 2)
+      .attr('y1', y1)
+      .attr('y2', y1 - dir * size),
+    color,
+    opacity,
+  )
+
+  applyArrowStroke(
+    g
+      .append('line')
+      .attr('class', 'arrow-head arrow-head-b')
+      .attr('x1', x)
+      .attr('x2', x - size / 2)
+      .attr('y1', y1)
+      .attr('y2', y1 - dir * size),
+    color,
+    opacity,
+  )
+
+  return g
+}
+
 /** Horizontal arrow from `fromX` to `toX` at fixed `y`. */
 export function drawHorizontalArrow(
   parent: d3.Selection<SVGGElement, unknown, null, undefined>,

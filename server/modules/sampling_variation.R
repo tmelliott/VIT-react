@@ -2,6 +2,7 @@ source("modules/sampling_one_num.R")
 source("modules/sampling_num_cat.R")
 source("modules/sampling_one_cat.R")
 source("modules/sampling_two_cat.R")
+source("modules/sampling_num_num.R")
 
 variable_layout <- function(xvar, yvar, variables, group_variables) {
     if (!nzchar(xvar)) {
@@ -10,9 +11,11 @@ variable_layout <- function(xvar, yvar, variables, group_variables) {
     x_is_num <- xvar %in% variables
     x_is_cat <- xvar %in% group_variables
     y_is_cat <- nzchar(yvar) && yvar %in% group_variables
+    y_is_num <- nzchar(yvar) && yvar %in% variables
 
     if (x_is_num && !y_is_cat) {
         if (!nzchar(yvar)) return("one_num")
+        if (y_is_num && yvar != xvar) return("num_num")
         return("unsupported")
     }
     if (x_is_num && y_is_cat) {
@@ -29,6 +32,8 @@ variable_layout <- function(xvar, yvar, variables, group_variables) {
 
 reset_result_state <- function(widget) {
     widget$population <- numeric(0)
+    widget$population_y <- numeric(0)
+    widget$population_intercept <- 0
     widget$population_stat <- 0
     widget$sample_stats <- numeric(0)
     widget$sample_indices <- integer(0)
@@ -185,16 +190,20 @@ update_sampling_preview <- function(widget) {
         pop_domain <- scale_domain(preview$population)
         widget$batch(c(
             "population",
+            "population_y",
             "population_group",
             "group_levels",
             "n_groups",
             "stat_kind",
             "population_stat",
+            "population_intercept",
             "scales",
             "status",
             "error_message"
         ), {
             widget$population <- preview$population
+            widget$population_y <- numeric(0)
+            widget$population_intercept <- 0
             widget$population_category <- integer(0)
             widget$population_group <- preview$population_group
             widget$group_levels <- preview$group_levels
@@ -217,6 +226,47 @@ update_sampling_preview <- function(widget) {
         return(invisible(NULL))
     }
 
+    if (layout == "num_num") {
+        preview <- preview_num_num(widget)
+        if (is.null(preview)) {
+            reset_result_state(widget)
+            widget$status <- "idle"
+            widget$updateState()
+            return(invisible(NULL))
+        }
+        pop_domain <- scale_domain(preview$population)
+        widget$batch(c(
+            "population",
+            "population_y",
+            "population_intercept",
+            "population_stat",
+            "stat_kind",
+            "scales",
+            "status",
+            "error_message"
+        ), {
+            widget$population <- preview$population
+            widget$population_y <- preview$population_y
+            widget$population_intercept <- preview$intercept
+            widget$population_stat <- preview$slope
+            widget$stat_kind <- "slope"
+            widget$population_category <- integer(0)
+            widget$population_group <- integer(0)
+            widget$group_levels <- character(0)
+            widget$group_stats <- numeric(0)
+            widget$n_groups <- 0L
+            widget$scales <- list(
+                pop = pop_domain,
+                sample = pop_domain,
+                dist = numeric(0)
+            )
+            widget$status <- "idle"
+            widget$error_message <- ""
+        })
+        widget$updateState()
+        return(invisible(NULL))
+    }
+
     pop <- extract_population(widget)
     if (is.null(pop)) {
         reset_result_state(widget)
@@ -227,12 +277,16 @@ update_sampling_preview <- function(widget) {
     pop_domain <- scale_domain(pop)
     widget$batch(c(
         "population",
+        "population_y",
+        "population_intercept",
         "population_stat",
         "scales",
         "status",
         "error_message"
     ), {
         widget$population <- pop
+        widget$population_y <- numeric(0)
+        widget$population_intercept <- 0
         widget$population_stat <- 0
         widget$scales <- list(
             pop = pop_domain,
@@ -264,6 +318,8 @@ samplingVariation <- createWidget(
         progress = ts_integer(1L, default = 0L),
         error_message = ts_character(1L, default = ""),
         population = ts_numeric(0L, default = numeric(0)),
+        population_y = ts_numeric(0L, default = numeric(0)),
+        population_intercept = ts_numeric(1L, default = 0),
         population_category = ts_integer(0L, default = integer(0)),
         population_group = ts_integer(0L, default = integer(0)),
         group_levels = ts_character(0L, default = character(0)),
@@ -317,6 +373,72 @@ samplingVariation <- createWidget(
                     .self$variables,
                     .self$group_variables
                 )
+
+                if (layout == "num_num") {
+                    dat <- extract_num_num_population(.self)
+                    if (is.null(dat)) {
+                        .self$status <- "error"
+                        .self$error_message <- "Select two numeric variables with loaded data"
+                        .self$updateState()
+                        return(NULL)
+                    }
+
+                    n_pop <- length(dat$population)
+                    n_samp <- as.integer(.self$sample_size)
+                    if (n_samp < 2L || n_samp > n_pop) {
+                        .self$status <- "error"
+                        .self$error_message <- sprintf(
+                            "Sample size must be between 2 and %d",
+                            n_pop
+                        )
+                        .self$updateState()
+                        return(NULL)
+                    }
+
+                    .self$status <- "computing"
+                    .self$progress <- 0L
+                    .self$error_message <- ""
+                    .self$updateState()
+
+                    result <- tryCatch(
+                        compute_num_num_sampling(
+                            x = dat$population,
+                            y = dat$population_y,
+                            sample_size = n_samp,
+                            progress_callback = function(p) {
+                                .self$progress <- as.integer(p)
+                                .self$updateState()
+                            }
+                        ),
+                        error = function(e) {
+                            .self$status <- "error"
+                            .self$error_message <- conditionMessage(e)
+                            .self$updateState()
+                            NULL
+                        }
+                    )
+
+                    if (is.null(result)) {
+                        return(NULL)
+                    }
+
+                    reset_num_cat_state(.self)
+                    reset_cat_preview_data(.self)
+                    .self$population <- result$population
+                    .self$population_y <- result$population_y
+                    .self$population_intercept <- result$population_intercept
+                    .self$population_stat <- result$population_stat
+                    .self$stat_kind <- result$stat_kind
+                    .self$sample_stats <- result$sample_stats
+                    .self$sample_indices <- result$sample_indices
+                    .self$dist_y <- result$dist_y
+                    .self$scales <- result$scales
+                    .self$progress <- 100L
+                    .self$status <- "ready"
+                    .self$error_message <- ""
+                    .self$updateState()
+                    return(NULL)
+                }
 
                 if (layout == "two_cat") {
                     dat <- extract_two_cat_population(.self)

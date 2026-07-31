@@ -322,6 +322,27 @@ function emptyPane(ctx: PaneHelpContext): { summary: ReactNode; details: ReactNo
   }
 }
 
+function p1NumNum(): { summary: ReactNode; details: ReactNode } {
+  return {
+    summary: (
+      <p>
+        The full dataset as a <strong>scatter plot</strong> of two numeric variables. The line is
+        the least-squares fit; arrows show how slope = Δy / Δx.
+      </p>
+    ),
+    details: (
+      <>
+        {populationPhilosophyNote()}
+        <p>
+          The right-hand panel restates the slope as a formula and draws the same slope on a unit
+          square for reference. Later panes will show how sample slopes vary around this population
+          value.
+        </p>
+      </>
+    ),
+  }
+}
+
 export function paneHelpContent(ctx: PaneHelpContext): {
   summary: ReactNode
   details: ReactNode
@@ -331,6 +352,7 @@ export function paneHelpContent(ctx: PaneHelpContext): {
   }
 
   if (ctx.paneIndex === 0) {
+    if (ctx.variableSupport === 'num_num') return p1NumNum()
     if (ctx.variableSupport === 'one_num') return p1OneNum(ctx)
     if (ctx.nGroups === 2) return p1TwoGroup(ctx)
     return p1MultiGroup(ctx)
