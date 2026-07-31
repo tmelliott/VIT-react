@@ -40,6 +40,7 @@ import {
   SAMPLE_DOT_COLOR,
   SAMPLE_DOT_OPACITY,
 } from './paneStyle'
+import { ensurePopLayers } from './populationVisibility'
 import { type PaneLayout, PANE, toAbsolute } from './paneCoords'
 import type { SampleAnimationTiming, MValue } from '../types'
 
@@ -190,14 +191,10 @@ function samplePointFill(
 }
 
 function popHighlightLayer(popGroup: SVGGElement): SVGGElement {
-  const sel = d3.select(popGroup)
-  let layer = sel.select<SVGGElement>('.pop-highlight-layer')
-  if (layer.empty()) {
-    layer = sel.append('g').attr('class', 'pop-highlight-layer')
-  }
-  const node = layer.node()!
-  node.parentNode?.appendChild(node)
-  return node
+  // Keep highlights outside `.pop-underlay` so fuzz/hide never covers samples.
+  const { highlight } = ensurePopLayers(popGroup)
+  highlight.parentNode?.appendChild(highlight)
+  return highlight
 }
 
 async function highlightSamplePointsOneByOne(

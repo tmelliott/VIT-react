@@ -10,10 +10,18 @@ import {
 import * as d3 from 'd3'
 import { DOT_RADIUS, heapYValues } from '../d3/heapLayout'
 import {
+  POP_DOT_FILL,
+  POP_DOT_FILL_OPACITY,
   POP_DOT_STROKE,
   POP_DOT_STROKE_OPACITY,
   POP_DOT_STROKE_WIDTH,
 } from '../d3/paneStyle'
+import {
+  applyPopulationVisibility,
+  clearPopUnderlay,
+  popDotsFilled,
+  type PopulationVisibility,
+} from '../d3/populationVisibility'
 import { drawHorizontalBoxplot, boxplotHighlightLabelX } from '../d3/boxplot'
 import { drawBottomAxis } from '../d3/drawPaneAxis'
 import {
@@ -53,6 +61,7 @@ import {
   type VariableSupport,
 } from '../variableSupport'
 import { PaneHelpModal } from '../PaneHelpModal'
+import { PopulationVisibilityControl } from '../PopulationVisibilityControl'
 import { paneHelpContent } from '../paneHelpContent'
 import type { StatKind } from '../types'
 import { distBaselineValue, parseSamplingStatistic, usesBoxplotHighlight, type SamplingStatistic } from '../statistics'
@@ -97,6 +106,9 @@ type ThreePaneDisplayProps = {
   populationStat: number | undefined
   showPopulationStat: boolean
   showFullPopulation: boolean
+  /** show = outlines; fuzz = blurred outlines + veil; hide = underlay hidden. */
+  populationVisibility?: PopulationVisibility
+  onPopulationVisibilityChange?: (mode: PopulationVisibility) => void
   moduleReady: boolean
   variableSupport: VariableSupport
   sampleSize: number
@@ -178,6 +190,7 @@ function drawPopulationGrouped(
   showStats: boolean,
   innerWidth: number,
   innerHeight: number,
+  filled: boolean,
 ) {
   const sel = d3.select(g)
   sel.selectAll('.pop-dot').remove()
@@ -193,7 +206,10 @@ function drawPopulationGrouped(
     .attr('cx', (d) => popX(d)!)
     .attr('cy', (_, i) => popY[i] ?? bands[0]?.baselineY ?? 0)
     .attr('r', DOT_RADIUS)
-    .attr('fill', 'none')
+    .attr('fill', (_, i) =>
+      filled ? (bands[populationGroup[i] ?? 0]?.color ?? POP_DOT_FILL) : 'none',
+    )
+    .attr('fill-opacity', filled ? POP_DOT_FILL_OPACITY : 1)
     .attr('stroke', (_, i) => bands[populationGroup[i] ?? 0]?.color ?? POP_DOT_STROKE)
     .attr('stroke-width', POP_DOT_STROKE_WIDTH)
     .attr('stroke-opacity', nGroups > 2 ? 0.7 : POP_DOT_STROKE_OPACITY)
@@ -260,6 +276,7 @@ function drawPopulationOneNum(
   boxAreaHeight: number,
   baselineY: number,
   stat: SamplingStatistic,
+  filled: boolean,
 ) {
   removeGroupedPopulationOverlays(g)
   const sel = d3
@@ -273,7 +290,8 @@ function drawPopulationOneNum(
     .attr('cx', (d) => popX(d)!)
     .attr('cy', (_, i) => popY[i] ?? baselineY)
     .attr('r', DOT_RADIUS)
-    .attr('fill', 'none')
+    .attr('fill', filled ? POP_DOT_FILL : 'none')
+    .attr('fill-opacity', filled ? POP_DOT_FILL_OPACITY : 1)
     .attr('stroke', POP_DOT_STROKE)
     .attr('stroke-width', POP_DOT_STROKE_WIDTH)
     .attr('stroke-opacity', POP_DOT_STROKE_OPACITY)
@@ -331,6 +349,8 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       populationStat,
       showPopulationStat,
       showFullPopulation,
+      populationVisibility = 'show',
+      onPopulationVisibilityChange,
       moduleReady,
       variableSupport,
       sampleSize,
@@ -521,9 +541,12 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
         return
       }
 
+      const underlay = clearPopUnderlay(g)
+      const filled = popDotsFilled(populationVisibility)
+
       if (numCatMode) {
         drawPopulationGrouped(
-          g,
+          underlay,
           population,
           populationGroup,
           groupBands,
@@ -537,10 +560,11 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
           showPopulationStat,
           innerWidth,
           innerHeight,
+          filled,
         )
       } else {
         drawPopulationOneNum(
-          g,
+          underlay,
           population,
           populationStat,
           showPopulationStat,
@@ -552,8 +576,14 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
           boxAreaHeight,
           baselineY,
           stat,
+          filled,
         )
       }
+
+      applyPopulationVisibility(g, populationVisibility, {
+        width: innerWidth,
+        height: innerHeight,
+      })
     }, [
       showData,
       population,
@@ -574,6 +604,7 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
       baselineY,
       showPopulationStat,
       showFullPopulation,
+      populationVisibility,
       populationStat,
       stat,
       innerWidth,
@@ -661,6 +692,16 @@ export const ThreePaneDisplay = forwardRef<ThreePaneHandle, ThreePaneDisplayProp
 
     return (
       <div ref={containerRef} className="relative h-full w-full rounded border border-gray-300 bg-white">
+        {onPopulationVisibilityChange && (
+          <PopulationVisibilityControl
+            value={populationVisibility}
+            onChange={onPopulationVisibilityChange}
+            style={{
+              top: 4,
+              right: margin.right + 28,
+            }}
+          />
+        )}
         {PANE_LABELS.map((label, paneIndex) => {
           const help = paneHelpContent({
             paneIndex: paneIndex as 0 | 1 | 2,

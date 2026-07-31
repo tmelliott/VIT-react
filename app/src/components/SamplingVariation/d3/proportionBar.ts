@@ -29,6 +29,7 @@ import {
 } from './sampleStatSummary'
 import { STAT_GAP, TRIANGLE_SIZE, TWO_GROUP_DIFF_ZONE_HEIGHT } from './statMarker'
 import type { StatKind } from '../types'
+import { ensurePopLayers } from './populationVisibility'
 
 export type UnitProportionOptions = {
   classPrefix?: string
@@ -475,28 +476,37 @@ function drawSegmentDots(
   }
 }
 
-/** Reset all unit dots in a proportion chart to outline-only. */
+/** Clear P1 sample highlights (kept above the privacy veil). */
 export function resetProportionDotsOutline(parent: SVGGElement) {
-  d3.select(parent)
-    .selectAll<SVGCircleElement, unknown>('circle[data-index]')
-    .attr('fill', 'none')
-    .attr('fill-opacity', 1)
-    .attr('stroke-width', function () {
-      const r = Number(this.getAttribute('r') ?? 4)
-      return r < 2.5 ? Math.max(0.4, r * 0.45) : 1.5
-    })
+  const { highlight } = ensurePopLayers(parent)
+  d3.select(highlight).selectAll('*').remove()
 }
 
-/** Fill sampled population dots in place (P1 highlight). */
+/** Draw sampled population highlights above the privacy veil (P1). */
 export function fillProportionSampleDots(
   parent: SVGGElement,
   sampleIndices: number[],
   encoded: number[],
 ) {
-  const g = d3.select(parent)
+  const { highlight } = ensurePopLayers(parent)
+  const layer = d3.select(highlight)
   for (const idx of sampleIndices) {
+    const pos = readProportionDotPosition(parent, idx)
+    if (!pos) continue
     const isFocus = encoded[idx] === 0
-    g.select<SVGCircleElement>(`circle[data-index="${idx}"]`)
+    let circle = layer.select<SVGCircleElement>(
+      `circle.highlight[data-index="${idx}"]`,
+    )
+    if (circle.empty()) {
+      circle = layer
+        .append('circle')
+        .attr('class', 'highlight')
+        .attr('data-index', idx)
+    }
+    circle
+      .attr('cx', pos.x)
+      .attr('cy', pos.y)
+      .attr('r', pos.r)
       .attr('fill', isFocus ? PROP_FOCUS_COLOR : PROP_ALT_STROKE)
       .attr('fill-opacity', 0.95)
       .attr('stroke', isFocus ? PROP_FOCUS_STROKE : PROP_ALT_STROKE)
@@ -510,8 +520,10 @@ export function readProportionDotPosition(
   parent: SVGGElement,
   index: number,
 ): DotPlacement | null {
-  const node = d3
-    .select(parent)
+  const root = d3.select(parent)
+  const underlay = root.select<SVGGElement>('.pop-underlay')
+  const scope = underlay.empty() ? root : underlay
+  const node = scope
     .select<SVGCircleElement>(`circle[data-index="${index}"]`)
     .node()
   if (!node) return null

@@ -31,6 +31,9 @@ import {
 } from './d3/groupLayout'
 import { availableStatistics, parseSamplingStatistic } from './statistics'
 import { useSamplingVariationWidget } from '../../hooks/useSamplingVariationWidget'
+import {
+  type PopulationVisibility,
+} from './d3/populationVisibility'
 
 function useInferenceActive(moduleStatus: string, configEpoch: number) {
   const confirmedEpochRef = useRef<number | null>(null)
@@ -67,6 +70,8 @@ function SamplingVariationView({
   const dataset = useDatasetFromUrl()
   const paneRef = useRef<PaneHandle | null>(null)
   const [configEpoch, setConfigEpoch] = useState(0)
+  const [populationVisibility, setPopulationVisibility] =
+    useState<PopulationVisibility>('show')
   const bumpConfig = () => setConfigEpoch((n) => n + 1)
 
   const variables = state.variables ?? []
@@ -225,6 +230,8 @@ function SamplingVariationView({
             statKind={statKind}
             populationStat={state.population_stat}
             showPopulationStat={showPopulationPreview}
+            populationVisibility={populationVisibility}
+            onPopulationVisibilityChange={setPopulationVisibility}
             moduleReady={inferenceActive}
             variableSupport={variableSupport}
             sampleSize={sampleSize}
@@ -238,6 +245,8 @@ function SamplingVariationView({
             slope={state.population_stat}
             intercept={populationIntercept}
             showPopulationStat={showPopulationPreview}
+            populationVisibility={populationVisibility}
+            onPopulationVisibilityChange={setPopulationVisibility}
             moduleReady={inferenceActive}
             variableSupport={variableSupport}
             sampleSize={sampleSize}
@@ -257,6 +266,8 @@ function SamplingVariationView({
             populationStat={displayPopulationStat}
             showPopulationStat={showPopulationPreview}
             showFullPopulation={showPopulationPreview}
+            populationVisibility={populationVisibility}
+            onPopulationVisibilityChange={setPopulationVisibility}
             moduleReady={inferenceActive}
             variableSupport={variableSupport}
             sampleSize={sampleSize}

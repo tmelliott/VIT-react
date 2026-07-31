@@ -5,6 +5,7 @@ import {
 } from '../components/SamplingVariation/d3/groupLayout'
 import { proportionFromEncoded } from '../components/SamplingVariation/d3/proportionLayout'
 import { leastSquares } from '../components/SamplingVariation/d3/slopeMath'
+import type { PopulationVisibility } from '../components/SamplingVariation/d3/populationVisibility'
 import { combineGroupProps } from '../components/SamplingVariation/statistics'
 import type { VariableSupport } from '../components/SamplingVariation/variableSupport'
 
@@ -50,6 +51,7 @@ type NumericFixtureProps = {
   populationStat: number | undefined
   showPopulationStat: boolean
   showFullPopulation: boolean
+  populationVisibility?: PopulationVisibility
   moduleReady: boolean
   variableSupport: VariableSupport
   sampleSize: number
@@ -66,6 +68,7 @@ type ProportionFixtureProps = {
   statKind: string
   populationStat: number | undefined
   showPopulationStat: boolean
+  populationVisibility?: PopulationVisibility
   moduleReady: boolean
   variableSupport: VariableSupport
   sampleSize: number
@@ -78,6 +81,7 @@ type SlopeFixtureProps = {
   slope: number
   intercept: number
   showPopulationStat: boolean
+  populationVisibility?: PopulationVisibility
   moduleReady: boolean
   variableSupport: VariableSupport
   sampleSize: number
@@ -401,10 +405,31 @@ function buildNumNumSlope(): P1GalleryFixture {
   }
 }
 
+function buildOneNumVisibility(mode: PopulationVisibility): P1GalleryFixture {
+  const base = buildOneNum('mean')
+  if (base.kind !== 'numeric') return base
+  const label = mode === 'fuzz' ? 'Fuzz population' : 'Hide population'
+  return {
+    ...base,
+    id: `one_num_mean_${mode}`,
+    title: `One numeric — ${label}`,
+    description:
+      mode === 'fuzz'
+        ? 'Outline population under a stronger blur + light veil (sample highlights sit above).'
+        : 'Population underlay hidden; only sample highlights would remain during animation.',
+    props: {
+      ...base.props,
+      populationVisibility: mode,
+    },
+  }
+}
+
 /** Static P1 scenarios for design review without R. */
 export const p1GalleryFixtures: P1GalleryFixture[] = [
   buildOneNum('mean'),
   buildOneNum('median'),
+  buildOneNumVisibility('fuzz'),
+  buildOneNumVisibility('hide'),
   buildNumCatTwoGroups(),
   buildNumCatThreeGroups(),
   buildOneCat(),

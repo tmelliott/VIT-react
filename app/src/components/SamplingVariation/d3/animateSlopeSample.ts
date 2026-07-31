@@ -4,13 +4,11 @@ import { type PaneLayout, PANE, toAbsolute } from './paneCoords'
 import {
   SAMPLE_DOT_COLOR,
   SAMPLE_DOT_OPACITY,
-  POP_DOT_STROKE,
-  POP_DOT_STROKE_OPACITY,
-  POP_DOT_STROKE_WIDTH,
   DIST_DOT_COLOR,
   DIST_DOT_OPACITY,
   DIST_BARCODE_VLINE_COLOR,
 } from './paneStyle'
+import { ensurePopLayers } from './populationVisibility'
 import { leastSquares } from './slopeMath'
 import {
   appendDistSlopePanelLine,
@@ -56,36 +54,14 @@ async function holdFastStepFrame(
   await delay(timingMs, signal)
 }
 
-function popScatterRoot(popGroup: SVGGElement): SVGGElement | null {
-  return d3.select(popGroup).select<SVGGElement>('.pop-slope-scatter').node()
-}
-
-function popHighlightLayer(scatterRoot: SVGGElement): SVGGElement {
-  const sel = d3.select(scatterRoot)
-  let layer = sel.select<SVGGElement>('.pop-highlight-layer')
-  if (layer.empty()) {
-    // Prefer the plot group so highlights share the scatter clip/stacking context.
-    const plot = sel.select<SVGGElement>('.pop-scatter-plot')
-    const parent = plot.empty() ? sel : plot
-    layer = parent.append('g').attr('class', 'pop-highlight-layer')
-  }
-  const node = layer.node()!
-  node.parentNode?.appendChild(node)
-  return node
+function popHighlightLayer(popGroup: SVGGElement): SVGGElement {
+  const { highlight } = ensurePopLayers(popGroup)
+  highlight.parentNode?.appendChild(highlight)
+  return highlight
 }
 
 function clearSlopeHighlights(popGroup: SVGGElement) {
-  const scatter = popScatterRoot(popGroup)
-  if (!scatter) return
-  const root = d3.select(scatter)
-  root.selectAll('.pop-highlight-layer').remove()
-  // Restore hollow population dots after a sample highlight cycle.
-  root
-    .selectAll<SVGCircleElement, unknown>('.pop-scatter-dot')
-    .attr('fill', 'none')
-    .attr('stroke', POP_DOT_STROKE)
-    .attr('stroke-width', POP_DOT_STROKE_WIDTH)
-    .attr('stroke-opacity', POP_DOT_STROKE_OPACITY)
+  d3.select(popGroup).select('.pop-highlight-layer').selectAll('*').remove()
 }
 
 async function highlightSlopePoints(
@@ -100,28 +76,12 @@ async function highlightSlopePoints(
   pointHighlightFastMs: number,
   signal: AnimSignal,
 ): Promise<void> {
-  const scatter = popScatterRoot(popGroup)
-  if (!scatter) return
-  const layer = popHighlightLayer(scatter)
-  const popDots = d3
-    .select(scatter)
-    .selectAll<SVGCircleElement, unknown>('.pop-scatter-dot')
+  const layer = popHighlightLayer(popGroup)
   const highlighted: number[] = []
   for (let i = 0; i < sampleIndices.length; i++) {
     const popIdx = sampleIndices[i]!
     if (signal.aborted) return
     highlighted.push(popIdx)
-
-    // Fill the existing hollow population dot so sampling is obvious.
-    popDots
-      .filter(function () {
-        return Number(this.getAttribute('data-pop-idx')) === popIdx
-      })
-      .attr('fill', SAMPLE_DOT_COLOR)
-      .attr('fill-opacity', 1)
-      .attr('stroke', SAMPLE_DOT_COLOR)
-      .attr('stroke-opacity', 1)
-      .raise()
 
     d3.select(layer)
       .selectAll<SVGCircleElement, number>('.highlight')

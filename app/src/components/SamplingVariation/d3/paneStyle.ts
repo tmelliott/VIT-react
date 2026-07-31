@@ -4,10 +4,12 @@ export const SAMPLE_DOT_OPACITY = 0.75
 export const DIST_DOT_COLOR = '#9ca3af'
 export const DIST_DOT_OPACITY = 0.85
 export const PREVIOUS_STAT_OPACITY = 0.08
-/** Population dots (P1) — outline only, never filled. */
+/** Population dots (P1) — outline only. */
 export const POP_DOT_STROKE = '#64748b'
+export const POP_DOT_FILL = '#64748b'
 export const POP_DOT_STROKE_WIDTH = 1.5
 export const POP_DOT_STROKE_OPACITY = 0.85
+export const POP_DOT_FILL_OPACITY = 0.85
 export const REFERENCE_STAT_COLOR = '#d1d5db'
 /** P3 population reference — dark enough to read over stacked dist dots. */
 export const DIST_POPULATION_REF_COLOR = '#374151'

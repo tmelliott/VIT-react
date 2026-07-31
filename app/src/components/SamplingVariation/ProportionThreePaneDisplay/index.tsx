@@ -32,10 +32,17 @@ import {
   type VariableSupport,
 } from '../variableSupport'
 import { PaneHelpModal } from '../PaneHelpModal'
+import { PopulationVisibilityControl } from '../PopulationVisibilityControl'
 import { paneHelpContent } from '../paneHelpContent'
 import type { StatKind } from '../types'
 import { distBaselineValue } from '../statistics'
 import { proportionFromEncoded } from '../d3/proportionLayout'
+import {
+  applyPopulationVisibility,
+  clearPopUnderlay,
+  popDotsFilled,
+  type PopulationVisibility,
+} from '../d3/populationVisibility'
 
 export type ProportionThreePaneHandle = {
   popGroup: SVGGElement
@@ -79,6 +86,9 @@ type ProportionThreePaneDisplayProps = {
   statKind: string
   populationStat: number | undefined
   showPopulationStat: boolean
+  /** show = outlines; fuzz = blurred outlines + veil; hide = underlay hidden. */
+  populationVisibility?: PopulationVisibility
+  onPopulationVisibilityChange?: (mode: PopulationVisibility) => void
   moduleReady: boolean
   variableSupport: VariableSupport
   sampleSize: number
@@ -121,6 +131,8 @@ export const ProportionThreePaneDisplay = forwardRef<
     statKind,
     populationStat,
     showPopulationStat,
+    populationVisibility = 'show',
+    onPopulationVisibilityChange,
     moduleReady,
     variableSupport,
     sampleSize,
@@ -275,12 +287,15 @@ export const ProportionThreePaneDisplay = forwardRef<
       return
     }
 
-    removeProportionBar(g)
-    d3.select(g).selectAll('.prop-group').remove()
+    const underlay = clearPopUnderlay(g)
+    removeProportionBar(underlay)
+    d3.select(underlay).selectAll('.prop-group').remove()
+    const filled = popDotsFilled(populationVisibility)
+    const dotStyle = filled ? 'filled' : 'outline'
 
     if (oneCat) {
       drawHybridProportionChart(
-        g,
+        underlay,
         populationCategory,
         innerWidth,
         innerHeight,
@@ -290,11 +305,12 @@ export const ProportionThreePaneDisplay = forwardRef<
           showStat: showPopulationStat,
           statValue: populationStat,
           categoryLabels: catLabels,
+          dotStyle,
         },
       )
     } else if (twoCat) {
       drawMultiGroupProportionBars(
-        g,
+        underlay,
         populationCategory,
         populationGroup,
         groupLevels,
@@ -310,10 +326,15 @@ export const ProportionThreePaneDisplay = forwardRef<
           showAvgDevSummary: nGroups >= 3,
           grandProp: populationGrandProp,
           statKind: (statKind || 'difference') as StatKind,
-          dotStyle: 'outline',
+          dotStyle,
         },
       )
     }
+
+    applyPopulationVisibility(g, populationVisibility, {
+      width: innerWidth,
+      height: innerHeight,
+    })
   }, [
     populationCategory,
     populationGroup,
@@ -325,6 +346,7 @@ export const ProportionThreePaneDisplay = forwardRef<
     innerWidth,
     innerHeight,
     showPopulationStat,
+    populationVisibility,
     populationStat,
     populationGrandProp,
     catLabels,
@@ -403,6 +425,16 @@ export const ProportionThreePaneDisplay = forwardRef<
 
   return (
     <div ref={containerRef} className="relative h-full w-full rounded border border-gray-300 bg-white">
+      {onPopulationVisibilityChange && (
+        <PopulationVisibilityControl
+          value={populationVisibility}
+          onChange={onPopulationVisibilityChange}
+          style={{
+            top: 4,
+            right: margin.right + 28,
+          }}
+        />
+      )}
       {PANE_LABELS.map((label, paneIndex) => {
         const help = paneHelpContent({
           paneIndex: paneIndex as 0 | 1 | 2,

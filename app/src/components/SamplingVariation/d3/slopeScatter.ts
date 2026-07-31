@@ -2,6 +2,8 @@ import * as d3 from 'd3'
 import { DOT_RADIUS } from './heapLayout'
 import {
   DIST_BARCODE_BLUE,
+  POP_DOT_FILL,
+  POP_DOT_FILL_OPACITY,
   POP_DOT_STROKE,
   POP_DOT_STROKE_OPACITY,
   POP_DOT_STROKE_WIDTH,
@@ -222,6 +224,8 @@ export function drawPopulationSlopeScatter(
     plotWidth: number
     plotHeight: number
     showDerivation?: boolean
+    /** Outline dots for show; same outlines under blur in fuzz mode. */
+    filled?: boolean
   },
 ) {
   const g = d3.select(parent)
@@ -237,6 +241,7 @@ export function drawPopulationSlopeScatter(
     plotWidth,
     plotHeight,
     showDerivation = true,
+    filled = false,
   } = options
 
   const xScale = d3.scaleLinear().domain(xDomain).range([0, plotWidth])
@@ -273,7 +278,8 @@ export function drawPopulationSlopeScatter(
       .attr('cx', xScale(xi)!)
       .attr('cy', yScale(yi)!)
       .attr('r', DOT_RADIUS)
-      .attr('fill', 'none')
+      .attr('fill', filled ? POP_DOT_FILL : 'none')
+      .attr('fill-opacity', filled ? POP_DOT_FILL_OPACITY : 1)
       .attr('stroke', POP_DOT_STROKE)
       .attr('stroke-width', POP_DOT_STROKE_WIDTH)
       .attr('stroke-opacity', POP_DOT_STROKE_OPACITY)

@@ -17,6 +17,7 @@ import {
   type VariableSupport,
 } from '../variableSupport'
 import { PaneHelpModal } from '../PaneHelpModal'
+import { PopulationVisibilityControl } from '../PopulationVisibilityControl'
 import { paneHelpContent } from '../paneHelpContent'
 import { leastSquares, slopeDerivationTriangle } from '../d3/slopeMath'
 import {
@@ -33,6 +34,13 @@ import {
   type DistSlopeSplit,
   type SlopePaneSplit,
 } from '../d3/slopeScatter'
+import {
+  applyPopulationVisibility,
+  clearPopUnderlay,
+  ensurePopLayers,
+  popDotsFilled,
+  type PopulationVisibility,
+} from '../d3/populationVisibility'
 
 export type SlopeThreePaneHandle = {
   popGroup: SVGGElement
@@ -80,6 +88,9 @@ type SlopeThreePaneDisplayProps = {
   slope: number | undefined
   intercept: number | undefined
   showPopulationStat: boolean
+  /** show = outlines; fuzz = blurred outlines + veil; hide = underlay hidden. */
+  populationVisibility?: PopulationVisibility
+  onPopulationVisibilityChange?: (mode: PopulationVisibility) => void
   moduleReady: boolean
   variableSupport: VariableSupport
   sampleSize: number
@@ -129,6 +140,8 @@ export const SlopeThreePaneDisplay = forwardRef<
     slope: slopeProp,
     intercept: interceptProp,
     showPopulationStat,
+    populationVisibility = 'show',
+    onPopulationVisibilityChange,
     moduleReady,
     variableSupport,
     sampleSize,
@@ -326,10 +339,11 @@ export const SlopeThreePaneDisplay = forwardRef<
       return
     }
 
-    const root = d3.select(popG)
-    root.selectAll('*').remove()
+    const underlay = clearPopUnderlay(popG)
+    const filled = popDotsFilled(populationVisibility)
 
-    const scatterG = root
+    const scatterG = d3
+      .select(underlay)
       .append('g')
       .attr('class', 'pop-slope-scatter')
       .attr('transform', `translate(${split.scatterPlotLeft}, 0)`)
@@ -345,6 +359,7 @@ export const SlopeThreePaneDisplay = forwardRef<
       plotWidth: split.scatterPlotWidth,
       plotHeight: scatterPlotHeight,
       showDerivation: true,
+      filled,
     })
 
     const triangle = slopeDerivationTriangle(
@@ -354,7 +369,8 @@ export const SlopeThreePaneDisplay = forwardRef<
       yDomain,
     )
 
-    const panelG = root
+    const panelG = d3
+      .select(underlay)
       .append('g')
       .attr('class', 'pop-slope-panel')
       .attr('transform', `translate(${split.slopePanelLeft}, 0)`)
@@ -368,6 +384,18 @@ export const SlopeThreePaneDisplay = forwardRef<
       panelYDomain,
       showLine: hasSampleSlopes,
     })
+
+    // Highlight host shares scatter local coords, above the privacy veil.
+    const { highlight } = ensurePopLayers(popG)
+    d3.select(highlight).attr(
+      'transform',
+      `translate(${split.scatterPlotLeft}, 0)`,
+    )
+
+    applyPopulationVisibility(popG, populationVisibility, {
+      width: innerWidth,
+      height: innerHeight,
+    })
   }, [
     showData,
     populationX,
@@ -380,6 +408,9 @@ export const SlopeThreePaneDisplay = forwardRef<
     hasSampleSlopes,
     split,
     scatterPlotHeight,
+    populationVisibility,
+    innerWidth,
+    innerHeight,
   ])
 
   useEffect(() => {
@@ -424,6 +455,16 @@ export const SlopeThreePaneDisplay = forwardRef<
       ref={containerRef}
       className="relative h-full w-full rounded border border-gray-300 bg-white"
     >
+      {onPopulationVisibilityChange && (
+        <PopulationVisibilityControl
+          value={populationVisibility}
+          onChange={onPopulationVisibilityChange}
+          style={{
+            top: 4,
+            right: margin.right + 28,
+          }}
+        />
+      )}
       {PANE_LABELS.map((label, paneIndex) => {
         const help = paneHelpContent({
           paneIndex: paneIndex as 0 | 1 | 2,
